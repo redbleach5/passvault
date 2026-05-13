@@ -1326,6 +1326,23 @@ select.form-select:focus { border-color: var(--accent); }
         </div>
       </div>
       <div class="settings-group">
+        <div class="settings-group-title">Резервное копирование</div>
+        <div class="settings-item" onclick="exportVault()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">💾</div>
+            <div class="settings-item-text"><h3>Экспорт хранилища</h3><p>Сохранить зашифрованную копию</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+        <div class="settings-item" onclick="triggerImportVault()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">📂</div>
+            <div class="settings-item-text"><h3>Импорт хранилища</h3><p>Восстановить из резервной копии</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+      </div>
+      <div class="settings-group">
         <div class="settings-group-title">Управление</div>
         <div class="settings-item" onclick="openAddCustomService()">
           <div class="settings-item-left">
@@ -1347,7 +1364,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 3.0.0</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 3.2.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1427,9 +1444,9 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 3.0.0</div>
+        <div class="about-version">Версия 3.2.0</div>
         <div class="about-desc">
-          PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам.
+          PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
       </div>
     </div>
@@ -1469,6 +1486,9 @@ select.form-select:focus { border-color: var(--accent); }
     </div>
   </div>
 </div>
+
+<!-- HIDDEN FILE INPUT FOR IMPORT -->
+<input type="file" id="vault-file-input" accept=".vault,.passvault" style="display:none" onchange="handleImportFile(event)">
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
@@ -1974,6 +1994,112 @@ async function loadCustomServices() {
   try { return JSON.parse(raw); } catch(e) { return []; }
 }
 
+// ===== VAULT EXPORT / IMPORT =====
+async function exportVault() {
+  if (!masterKey) {
+    showToast('Сначала разблокируйте хранилище');
+    return;
+  }
+  try {
+    const vaultEnc = localStorage.getItem('pv_vault');
+    const customEnc = localStorage.getItem('pv_custom_services');
+    const salt = localStorage.getItem('pv_salt');
+    const hash = localStorage.getItem('pv_hash');
+    const auditEnc = localStorage.getItem('pv_audit');
+    const format = localStorage.getItem('pv_format') || 'v2';
+
+    const exportObj = {
+      version: 2,
+      format: 'passvault-export',
+      kdf: 'PBKDF2-SHA256',
+      kdfIterations: PBKDF2_ITERATIONS,
+      cipher: 'AES-256-GCM',
+      salt: salt,
+      hash: hash,
+      vault: vaultEnc,
+      customServices: customEnc,
+      auditLog: auditEnc,
+      formatVersion: format,
+      timestamp: new Date().toISOString(),
+      serviceCount: Object.keys((await loadVault()).credentials || {}).length
+    };
+
+    const jsonStr = JSON.stringify(exportObj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `passvault-backup-${dateStr}.vault`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    await auditLog('export', null, `Backup created (${exportObj.serviceCount} services)`, 'success');
+    showToast('Резервная копия сохранена');
+  } catch(e) {
+    await auditLog('export', null, 'Export failed: ' + e.message, 'failure');
+    showToast('Ошибка экспорта');
+  }
+}
+
+function triggerImportVault() {
+  document.getElementById('vault-file-input').click();
+}
+
+async function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  try {
+    const text = await file.text();
+    const importObj = JSON.parse(text);
+
+    if (!importObj.format || importObj.format !== 'passvault-export') {
+      showToast('Неверный формат файла');
+      return;
+    }
+    if (!importObj.salt || !importObj.hash || !importObj.vault) {
+      showToast('Файл повреждён или неполный');
+      return;
+    }
+
+    if (masterKey) {
+      showConfirm('Импорт хранилища', 'Текущие данные будут заменены данными из файла. Продолжить?', 'Импортировать', async () => {
+        await doImportVault(importObj);
+      });
+    } else {
+      window._pendingImport = importObj;
+      showToast('Введите мастер-пароль от резервной копии');
+      document.getElementById('unlock-pw').placeholder = 'Мастер-пароль от резервной копии';
+      document.getElementById('unlock-pw').dataset.importMode = '1';
+      showScreen('screen-unlock');
+    }
+  } catch(e) {
+    showToast('Ошибка чтения файла');
+  }
+}
+
+async function doImportVault(importObj) {
+  try {
+    localStorage.setItem('pv_salt', importObj.salt);
+    localStorage.setItem('pv_hash', importObj.hash);
+    if (importObj.vault) localStorage.setItem('pv_vault', importObj.vault);
+    if (importObj.customServices) localStorage.setItem('pv_custom_services', importObj.customServices);
+    if (importObj.auditLog) localStorage.setItem('pv_audit', importObj.auditLog);
+    if (importObj.formatVersion) localStorage.setItem('pv_format', importObj.formatVersion);
+
+    lockVault();
+    await auditLog('import', null, `Backup restored (${importObj.serviceCount || '?'} services)`, 'success');
+    showToast('Данные импортированы. Введите мастер-пароль от копии.');
+  } catch(e) {
+    showToast('Ошибка импорта');
+  }
+}
+
 // ===== UI HELPERS =====
 function showScreen(id) {
   document.querySelectorAll('.screen, .auth-screen').forEach(s => s.classList.remove('active'));
@@ -2111,6 +2237,28 @@ async function doUnlock() {
     localStorage.removeItem('pv_lockout_until');
     document.getElementById('unlock-pw').value = '';
     document.getElementById('unlock-error').style.display = 'none';
+
+    // Check if this is an import-mode unlock
+    const unlockInput = document.getElementById('unlock-pw');
+    const isImportMode = unlockInput.dataset.importMode === '1';
+    delete unlockInput.dataset.importMode;
+    unlockInput.placeholder = 'Введите пароль';
+
+    if (isImportMode && window._pendingImport) {
+      const importObj = window._pendingImport;
+      window._pendingImport = null;
+      const { hash: importHash } = await deriveKeyAndHash(pw, importObj.salt);
+      if (constantTimeEqual(importHash, importObj.hash)) {
+        await doImportVault(importObj);
+        _migratePw = null;
+        return;
+      } else {
+        showToast('Пароль не подходит к резервной копии');
+        _migratePw = null;
+        lockVault();
+        return;
+      }
+    }
 
     // Migrate old format if needed
     await migrateVaultIfNeeded(key, _migratePw);

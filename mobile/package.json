@@ -1,6 +1,6 @@
 {
   "name": "passvault-app",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "PassVault - Secure Password Manager",
   "main": "index.js",
   "scripts": {

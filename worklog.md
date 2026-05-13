@@ -136,3 +136,36 @@ Stage Summary:
 - All 7 bugs fixed in both web and mobile versions
 - APK rebuilt: `/home/z/my-project/download/passvault.apk` (4.2 MB)
 - GitHub release: https://github.com/redbleach5/passvault/releases/tag/v3.2.1
+
+---
+Task ID: refactor-v4.0.0
+Agent: Main Agent
+Task: Modular architecture refactoring — split monolithic HTML into 11 ES modules
+
+Work Log:
+- Read full 3135-line monolithic index.html and mapped all function dependencies
+- Created /home/z/my-project/mobile/www/js/ directory structure
+- Extracted crypto.js (AES-256-GCM, PBKDF2, password strength, migration)
+- Extracted storage.js (Preferences/localStorage layer, preLoad, sync)
+- Extracted services.js (24 service registry + categories)
+- Extracted audit.js (encrypted activity log)
+- Extracted state.js (shared mutable state object)
+- Extracted ui.js (toast, modal, confirm, clipboard, HTML helpers)
+- Extracted ui/screens.js (navigation, auto-lock, theme, lock/unlock)
+- Extracted ui/vault.js (dashboard, cards, detail, add credential)
+- Extracted ui/generator.js (password generator UI)
+- Extracted ui/settings.js (settings, export/import, custom services, audit log view)
+- Extracted ui/wizard.js (3-step password change wizard)
+- Extracted app.js (entry point, setup, unlock, init)
+- Updated index.html to thin shell (~1499 lines) with <script type="module">
+- Fixed circular dependencies with dynamic imports
+- Rebuilt APK: BUILD SUCCESSFUL
+- Version bumped to 4.0.0
+- Pushed to refactor/modular-architecture branch
+- Created GitHub Release v4.0.0 (pre-release)
+
+Stage Summary:
+- 13 files changed, 1863 insertions, 1640 deletions
+- APK: /home/z/my-project/download/passvault.apk (4.1 MB)
+- Branch: refactor/modular-architecture
+- Release: https://github.com/redbleach5/passvault/releases/tag/v4.0.0

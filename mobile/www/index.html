@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; font-src 'self'; media-src 'none'; object-src 'none';">
 <!-- CryptoJS loaded dynamically only for migration from v1 format -->
 <style>
 :root {
@@ -1204,12 +1204,13 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="form-group">
         <label>Подтвердите пароль</label>
         <div class="input-wrapper">
-          <input type="password" id="setup-pw2" placeholder="Повторите пароль" autocomplete="off">
+          <input type="password" id="setup-pw2" placeholder="Повторите пароль" autocomplete="off" onkeydown="if(event.key==='Enter'&&!document.getElementById('setup-btn').disabled)doSetup()">
           <button class="toggle-vis" onclick="toggleVis('setup-pw2')">👁️</button>
         </div>
         <div class="match-hint" id="setup-match"></div>
       </div>
       <button class="btn btn-primary" id="setup-btn" disabled onclick="doSetup()">Создать хранилище</button>
+      <div class="auth-error" id="setup-error"></div>
     </div>
   </div>
 
@@ -2190,21 +2191,47 @@ function checkSetupMatch() {
 }
 
 async function doSetup() {
+  const btn = document.getElementById('setup-btn');
+  const errEl = document.getElementById('setup-error');
   const pw = document.getElementById('setup-pw1').value;
   if (pw.length < 8) return;
-  const { key, hash, salt } = await deriveKeyAndHash(pw);
-  masterKey = key;
-  masterHash = hash;
-  failedAttempts = 0;
-  localStorage.setItem('pv_salt', salt);
-  localStorage.setItem('pv_hash', hash);
-  localStorage.setItem('pv_format', 'v2');
-  await saveVault({ credentials: {} });
-  auditLog('vault_created', null, null, 'success');
-  document.getElementById('setup-pw1').value = '';
-  document.getElementById('setup-pw2').value = '';
-  startAutoLock();
-  enterApp();
+
+  // Check if Web Crypto API is available
+  if (!crypto || !crypto.subtle) {
+    errEl.textContent = 'Ошибка: Web Crypto API недоступен. Используйте HTTPS или localhost.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    // Show loading state (PBKDF2 600k iterations takes a moment)
+    btn.disabled = true;
+    btn.textContent = 'Создание...';
+    errEl.style.display = 'none';
+
+    const { key, hash, salt } = await deriveKeyAndHash(pw);
+    masterKey = key;
+    masterHash = hash;
+    failedAttempts = 0;
+    localStorage.setItem('pv_salt', salt);
+    localStorage.setItem('pv_hash', hash);
+    localStorage.setItem('pv_format', 'v2');
+    await saveVault({ credentials: {} });
+    auditLog('vault_created', null, null, 'success');
+    document.getElementById('setup-pw1').value = '';
+    document.getElementById('setup-pw2').value = '';
+    startAutoLock();
+    enterApp();
+    // Reset button state for potential future use
+    btn.disabled = false;
+    btn.textContent = 'Создать хранилище';
+  } catch(e) {
+    console.error('Setup failed:', e);
+    errEl.textContent = 'Ошибка создания хранилища: ' + (e.message || e);
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Создать хранилище';
+  }
 }
 
 // ===== UNLOCK =====
@@ -2221,12 +2248,20 @@ async function doUnlock() {
     return;
   }
   const pw = document.getElementById('unlock-pw').value;
+  if (!pw) return;
   const salt = localStorage.getItem('pv_salt');
   const storedHash = localStorage.getItem('pv_hash');
+
+  if (!salt || !storedHash) {
+    showToast('Хранилище не найдено. Создайте новое.');
+    showScreen('screen-setup');
+    return;
+  }
 
   // Store password in memory ONLY (never in localStorage)
   let _migratePw = pw;
 
+  try {
   const { key, hash } = await deriveKeyAndHash(pw, salt);
 
   if (constantTimeEqual(hash, storedHash)) {
@@ -2288,6 +2323,12 @@ async function doUnlock() {
     document.getElementById('unlock-error').style.display = 'block';
     const remain = MAX_FAILED_ATTEMPTS - failedAttempts;
     document.getElementById('unlock-error').textContent = '\u274c \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c (' + failedAttempts + '/' + MAX_FAILED_ATTEMPTS + '. \u041e\u0441\u0442\u0430\u043b\u043e\u0441\u044c ' + remain + ' \u043f\u043e\u043f\u044b\u0442\u043e\u043a)';
+  }
+  } catch(e) {
+    console.error('Unlock failed:', e);
+    document.getElementById('unlock-error').textContent = 'Ошибка: ' + (e.message || e);
+    document.getElementById('unlock-error').style.display = 'block';
+    _migratePw = null;
   }
 }
 
@@ -3056,6 +3097,13 @@ function showSecurityInfo() {
 
 // ===== INIT =====
 function init() {
+  // Check Web Crypto API availability
+  if (!crypto || !crypto.subtle) {
+    document.getElementById('setup-error').textContent = 'Web Crypto API недоступен. Откройте страницу по HTTPS или localhost.';
+    document.getElementById('setup-error').style.display = 'block';
+    document.getElementById('setup-btn').disabled = true;
+  }
+
   const hash = localStorage.getItem('pv_hash');
   if (hash) {
     showScreen('screen-unlock');

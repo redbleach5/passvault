@@ -1,6 +1,6 @@
 {
   "name": "passvault-app",
-  "version": "5.8.0",
+  "version": "5.9.0",
   "description": "PassVault - Secure Password Manager",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,6 @@
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/preferences": "^8.0.1",
-    "capacitor-secure-storage-plugin": "^0.10.0",
     "crypto-js": "^4.2.0"
   }
 }

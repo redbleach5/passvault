@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self';">
+<script src="crypto-js.min.js"></script>
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -1492,25 +1493,53 @@ let wizardServiceId = null;
 let wizardStep = 0;
 let wizardNewPassword = '';
 let confirmCallback = null;
+const credMap = new Map(); // Safe credential storage (not in DOM)
+let autoLockTimer = null;
+const AUTO_LOCK_MS = 5 * 60 * 1000; // 5 minutes
+let failedAttempts = 0;
+let lockoutUntil = 0;
 
 // ===== ENCRYPTION =====
 function deriveKey(password, salt) {
   if (!salt) salt = CryptoJS.lib.WordArray.random(16).toString();
-  const key = CryptoJS.PBKDF2(password, salt, { keySize: 256/32, iterations: 100000, hasher: CryptoJS.algo.SHA256 });
+  const key = CryptoJS.PBKDF2(password, salt, { keySize: 256/32, iterations: 600000, hasher: CryptoJS.algo.SHA256 });
   return { key: key.toString(), salt: salt };
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
 }
 
 function encrypt(data, key) {
   const iv = CryptoJS.lib.WordArray.random(16);
   const encrypted = CryptoJS.AES.encrypt(data, CryptoJS.enc.Hex.parse(key), { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-  return iv.toString() + ':' + encrypted.toString();
+  const ciphertext = iv.toString() + ':' + encrypted.toString();
+  // HMAC for authenticated encryption
+  const hmacKey = CryptoJS.HmacSHA256('hmac-key-derivation', CryptoJS.enc.Hex.parse(key)).toString();
+  const hmac = CryptoJS.HmacSHA256(ciphertext, CryptoJS.enc.Hex.parse(hmacKey)).toString();
+  return hmac + ':' + ciphertext;
 }
 
 function decrypt(encData, key) {
   try {
     const parts = encData.split(':');
-    const iv = CryptoJS.enc.Hex.parse(parts[0]);
-    const ct = parts[1];
+    if (parts.length < 3) {
+      // Legacy format (no HMAC) — try old decryption
+      const iv = CryptoJS.enc.Hex.parse(parts[0]);
+      const ct = parts[1];
+      const decrypted = CryptoJS.AES.decrypt(ct, CryptoJS.enc.Hex.parse(key), { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+      return decrypted.toString(CryptoJS.enc.Utf8);
+    }
+    const [storedHmac, ivHex, ct] = parts;
+    const ciphertext = ivHex + ':' + ct;
+    // Verify HMAC (constant-time)
+    const hmacKey = CryptoJS.HmacSHA256('hmac-key-derivation', CryptoJS.enc.Hex.parse(key)).toString();
+    const computedHmac = CryptoJS.HmacSHA256(ciphertext, CryptoJS.enc.Hex.parse(hmacKey)).toString();
+    if (!constantTimeEqual(storedHmac, computedHmac)) return null; // Tampered!
+    const iv = CryptoJS.enc.Hex.parse(ivHex);
     const decrypted = CryptoJS.AES.decrypt(ct, CryptoJS.enc.Hex.parse(key), { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
     return decrypted.toString(CryptoJS.enc.Utf8);
   } catch(e) {
@@ -1590,11 +1619,24 @@ function loadVault() {
 }
 
 function saveCustomServices(svcs) {
-  localStorage.setItem('pv_custom_services', JSON.stringify(svcs));
+  if (masterKey) {
+    const enc = encrypt(JSON.stringify(svcs), masterKey);
+    localStorage.setItem('pv_custom_services', enc);
+  } else {
+    localStorage.setItem('pv_custom_services', JSON.stringify(svcs));
+  }
 }
 
 function loadCustomServices() {
-  try { return JSON.parse(localStorage.getItem('pv_custom_services') || '[]'); } catch(e) { return []; }
+  const raw = localStorage.getItem('pv_custom_services');
+  if (!raw) return [];
+  // Try decrypt first (new format)
+  if (masterKey) {
+    const dec = decrypt(raw, masterKey);
+    if (dec) { try { return JSON.parse(dec); } catch(e) {} }
+  }
+  // Fall back to unencrypted (legacy)
+  try { return JSON.parse(raw); } catch(e) { return []; }
 }
 
 // ===== UI HELPERS =====
@@ -1692,31 +1734,47 @@ function doSetup() {
   const { key, salt } = deriveKey(pw);
   const hash = hashMasterPassword(pw, salt);
   masterKey = key;
+  failedAttempts = 0;
   localStorage.setItem('pv_salt', salt);
   localStorage.setItem('pv_hash', hash);
   saveVault({ credentials: {} });
   document.getElementById('setup-pw1').value = '';
   document.getElementById('setup-pw2').value = '';
+  startAutoLock();
   enterApp();
 }
 
 // ===== UNLOCK =====
 function doUnlock() {
+  // Rate limiting
+  const now = Date.now();
+  if (now < lockoutUntil) {
+    const waitSec = Math.ceil((lockoutUntil - now) / 1000);
+    showToast('Подождите ' + waitSec + 'с перед повторной попыткой');
+    return;
+  }
   const pw = document.getElementById('unlock-pw').value;
   const salt = localStorage.getItem('pv_salt');
   const storedHash = localStorage.getItem('pv_hash');
   const { key } = deriveKey(pw, salt);
   const hash = hashMasterPassword(pw, salt);
-  if (hash === storedHash) {
+  if (constantTimeEqual(hash, storedHash)) {
     masterKey = key;
+    failedAttempts = 0;
     document.getElementById('unlock-pw').value = '';
     document.getElementById('unlock-error').style.display = 'none';
+    startAutoLock();
     enterApp();
   } else {
+    failedAttempts++;
+    const delays = [0,0,0,1000,1000,5000,5000,5000,5000,5000,30000];
+    const delay = delays[Math.min(failedAttempts, delays.length - 1)] || 30000;
+    if (delay > 0) lockoutUntil = Date.now() + delay;
     const form = document.querySelector('#screen-unlock .auth-form');
     form.classList.add('shake');
     setTimeout(() => form.classList.remove('shake'), 500);
     document.getElementById('unlock-error').style.display = 'block';
+    document.getElementById('unlock-error').textContent = '\u274c \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c (' + failedAttempts + ' \u043f\u043e\u043f\u044b\u0442\u043e\u043a)';
   }
 }
 
@@ -1733,8 +1791,26 @@ function enterApp() {
 
 function lockVault() {
   masterKey = null;
+  credMap.clear();
+  clearTimeout(autoLockTimer);
   showScreen('screen-unlock');
   document.getElementById('unlock-error').style.display = 'none';
+}
+
+function resetAutoLock() {
+  if (!masterKey) return;
+  clearTimeout(autoLockTimer);
+  autoLockTimer = setTimeout(() => { lockVault(); showToast('Хранилище заблокировано (таймаут)'); }, AUTO_LOCK_MS);
+}
+
+function startAutoLock() {
+  resetAutoLock();
+  ['click','keydown','mousemove','touchstart','scroll'].forEach(evt => {
+    document.addEventListener(evt, resetAutoLock, { passive: true });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && masterKey) lockVault();
+  });
 }
 
 // ===== TAB SWITCHING =====
@@ -1791,25 +1867,33 @@ function renderDashboard() {
 
   document.getElementById('cards-list').innerHTML = filtered.map(svc => {
     const cred = vault.credentials[svc.id];
+    const safeId = escHtml(svc.id);
     if (cred) {
-      return `<div class="svc-card fade-in" onclick="openDetail('${svc.id}')">
+      return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
         <div class="svc-icon">${svc.iconEmoji}</div>
         <div class="svc-info">
-          <div class="svc-name">${svc.displayName} ${catBadge(svc.category)}</div>
-          <div class="svc-detail">${cred.username} · ${maskPassword(cred.password)}</div>
+          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
+          <div class="svc-detail">${escHtml(cred.username)} · ${escHtml(maskPassword(cred.password))}</div>
         </div>
       </div>`;
     } else {
-      return `<div class="svc-card fade-in" onclick="openAddCredentialFor('${svc.id}')">
+      return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
         <div class="svc-icon">${svc.iconEmoji}</div>
         <div class="svc-info">
-          <div class="svc-name">${svc.displayName} ${catBadge(svc.category)}</div>
+          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
           <div class="svc-detail">Нет учётных данных</div>
         </div>
         <button class="svc-action-btn">＋ Добавить</button>
       </div>`;
     }
   }).join('');
+  // Delegated click handler for cards
+  document.getElementById('cards-list').onclick = function(e) {
+    const card = e.target.closest('[data-action]');
+    if (!card) return;
+    if (card.dataset.action === 'detail') openDetail(card.dataset.svc);
+    else if (card.dataset.action === 'add-for') openAddCredentialFor(card.dataset.svc);
+  };
 }
 
 function setCategory(cat) {
@@ -1824,10 +1908,13 @@ function openDetail(svcId) {
   const vault = loadVault();
   const cred = vault.credentials[svcId];
 
+  // Store credential safely in credMap (not in DOM)
+  if (cred) credMap.set(svcId, cred);
+
   document.getElementById('detail-icon').textContent = svc.iconEmoji;
   document.getElementById('detail-name').textContent = svc.displayName;
   const cat = CATEGORIES[svc.category] || CATEGORIES.custom;
-  document.getElementById('detail-cat').innerHTML = `<span style="color:${cat.color}">${cat.name}</span>`;
+  document.getElementById('detail-cat').innerHTML = `<span style="color:${cat.color}">${escHtml(cat.name)}</span>`;
 
   let html = '';
 
@@ -1837,15 +1924,15 @@ function openDetail(svcId) {
         <div class="cred-label">Имя пользователя</div>
         <div class="cred-value-row">
           <div class="cred-value" id="detail-username">${escHtml(cred.username)}</div>
-          <button class="cred-btn" onclick="copyText('${escAttr(cred.username)}', this)">📋</button>
+          <button class="cred-btn" data-action="copy-user" data-svc="${escHtml(svcId)}">📋</button>
         </div>
       </div>
       <div class="cred-field">
         <div class="cred-label">Пароль</div>
         <div class="cred-value-row">
-          <div class="cred-value" id="detail-password">${maskPassword(cred.password)}</div>
-          <button class="cred-btn" onclick="toggleDetailPw('${escAttr(cred.password)}', this)">👁️</button>
-          <button class="cred-btn" onclick="copyText('${escAttr(cred.password)}', this)">📋</button>
+          <div class="cred-value" id="detail-password">${escHtml(maskPassword(cred.password))}</div>
+          <button class="cred-btn" data-action="toggle-pw" data-svc="${escHtml(svcId)}">👁️</button>
+          <button class="cred-btn" data-action="copy-pw" data-svc="${escHtml(svcId)}">📋</button>
         </div>
       </div>`;
 
@@ -1858,9 +1945,9 @@ function openDetail(svcId) {
 
     html += `
       <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
-        <button class="btn btn-primary" onclick="startWizard('${svcId}')">🔄 Сменить пароль</button>
-        ${svc.passwordChangeUrl ? `<button class="btn btn-outline" onclick="window.open('${svc.passwordChangeUrl}','_blank')">🔗 Открыть страницу смены пароля</button>` : ''}
-        <button class="btn btn-danger btn-sm" style="margin-top:8px" onclick="deleteCredential('${svcId}')">🗑️ Удалить учётные данные</button>
+        <button class="btn btn-primary" data-action="wizard" data-svc="${escHtml(svcId)}">🔄 Сменить пароль</button>
+        ${svc.passwordChangeUrl && svc.passwordChangeUrl.startsWith('https://') ? `<button class="btn btn-outline" data-action="open-url" data-url="${escHtml(svc.passwordChangeUrl)}">🔗 Открыть страницу смены пароля</button>` : ''}
+        <button class="btn btn-danger btn-sm" style="margin-top:8px" data-action="delete" data-svc="${escHtml(svcId)}">🗑️ Удалить учётные данные</button>
       </div>`;
   }
 
@@ -1877,6 +1964,19 @@ function openDetail(svcId) {
   }
 
   document.getElementById('detail-content').innerHTML = html;
+  // Delegated event listener for safe credential access
+  document.getElementById('detail-content').onclick = function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const svcId = btn.dataset.svc;
+    if (action === 'copy-user' && svcId) { const c = credMap.get(svcId); if (c) copyText(c.username, btn); }
+    else if (action === 'copy-pw' && svcId) { const c = credMap.get(svcId); if (c) copyText(c.password, btn); }
+    else if (action === 'toggle-pw' && svcId) { const c = credMap.get(svcId); if (c) toggleDetailPw(c.password, btn); }
+    else if (action === 'wizard' && svcId) { startWizard(svcId); }
+    else if (action === 'delete' && svcId) { deleteCredential(svcId); }
+    else if (action === 'open-url') { const url = btn.dataset.url; if (url && url.startsWith('https://')) window.open(url, '_blank'); }
+  };
   showScreen('screen-detail');
 }
 
@@ -1901,16 +2001,20 @@ function toggleDetailPw(pw, btn) {
 function copyText(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 1200); }
-    showToast('Скопировано!');
+    showToast('Скопировано! (очищено через 30с)');
+    setTimeout(() => { try { navigator.clipboard.writeText(''); } catch(e){} }, 30000);
   }).catch(() => {
-    // Fallback
     const ta = document.createElement('textarea');
     ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
+    ta.value = '';
     document.body.removeChild(ta);
-    showToast('Скопировано!');
+    showToast('Скопировано! (очищено через 30с)');
+    setTimeout(() => { try { navigator.clipboard.writeText(''); } catch(e){} }, 30000);
   });
 }
 
@@ -1944,15 +2048,20 @@ function openAddCredential() {
     </div>
     <div id="svc-picker-list" style="max-height:300px;overflow-y:auto">
       ${allServices.map(svc => `
-        <div class="svc-picker-item" data-name="${svc.name.toLowerCase()}" onclick="selectServiceForAdd('${svc.id}')">
+        <div class="svc-picker-item" data-name="${escHtml(svc.name.toLowerCase())}" data-action="select-svc" data-svc="${escHtml(svc.id)}">
           <div class="svc-picker-icon">${svc.iconEmoji}</div>
           <div>
-            <div class="svc-picker-name">${svc.displayName}</div>
-            <div class="svc-picker-cat">${(CATEGORIES[svc.category]||CATEGORIES.custom).name}</div>
+            <div class="svc-picker-name">${escHtml(svc.displayName)}</div>
+            <div class="svc-picker-cat">${escHtml((CATEGORIES[svc.category]||CATEGORIES.custom).name)}</div>
           </div>
         </div>
       `).join('')}
     </div>`;
+  // Delegated click handler for service picker
+  body.querySelector('#svc-picker-list').onclick = function(e) {
+    const item = e.target.closest('[data-action="select-svc"]');
+    if (item) selectServiceForAdd(item.dataset.svc);
+  };
   openModal('modal-add-cred');
   setTimeout(() => document.getElementById('add-cred-search')?.focus(), 100);
 }
@@ -1997,8 +2106,13 @@ function selectServiceForAdd(svcId) {
       <label>Заметки (необязательно)</label>
       <textarea class="form-textarea" id="add-notes" placeholder="Дополнительная информация..."></textarea>
     </div>
-    <button class="btn btn-primary" onclick="saveCredential('${svcId}')">💾 Сохранить</button>
+    <button class="btn btn-primary" data-action="save-cred" data-svc="${escHtml(svcId)}">💾 Сохранить</button>
   `;
+
+  // Delegated handler for save button
+  body.querySelector('[data-action="save-cred"]').onclick = function() {
+    saveCredential(this.dataset.svc);
+  };
 
   document.getElementById('add-password').addEventListener('input', function() {
     updateStrengthMeter('add-password', 'add-strength-fill', 'add-strength-text');
@@ -2278,7 +2392,9 @@ function openAddCustomService() {
 }
 
 function saveCustomService() {
-  const id = document.getElementById('cs-id').value.trim().replace(/\s+/g, '-').toLowerCase();
+  const idRaw = document.getElementById('cs-id').value.trim().replace(/\s+/g, '-').toLowerCase();
+  // Validate ID: only alphanumeric and hyphens (prevent XSS)
+  const id = idRaw.replace(/[^a-z0-9-]/g, '');
   const displayName = document.getElementById('cs-display').value.trim();
   const category = document.getElementById('cs-category').value;
   const passwordChangeUrl = document.getElementById('cs-pwurl').value.trim();
@@ -2287,6 +2403,10 @@ function saveCustomService() {
   const twoFactorNote = document.getElementById('cs-2fa').value.trim() || null;
 
   if (!id || !displayName) { showToast('Заполните обязательные поля'); return; }
+  if (id.length < 2) { showToast('ID слишком короткий'); return; }
+  // Validate URLs: only https allowed
+  if (passwordChangeUrl && !passwordChangeUrl.startsWith('https://')) { showToast('URL смены пароля должен начинаться с https://'); return; }
+  if (loginUrl && !loginUrl.startsWith('https://')) { showToast('URL входа должен начинаться с https://'); return; }
 
   const instructions = instructionsRaw ? instructionsRaw.split('\n').map(s=>s.trim()).filter(Boolean) : [];
   const emojis = { email:'📧', social:'💬', dev:'🔧', cloud:'☁️', messaging:'📱', finance:'💰', streaming:'🎬', gaming:'🎮', ecommerce:'🛒', custom:'⭐' };

@@ -169,3 +169,23 @@ Stage Summary:
 - APK: /home/z/my-project/download/passvault.apk (4.1 MB)
 - Branch: refactor/modular-architecture
 - Release: https://github.com/redbleach5/passvault/releases/tag/v4.0.0
+
+---
+Task ID: 1
+Agent: main
+Task: Fix biometric Class 2 error and file picker for import
+
+Work Log:
+- Read BiometricPlugin.java — identified root cause: authenticateAndRetrieve() uses CryptoObject which requires BIOMETRIC_STRONG (Class 3), but user's device only has Class 2 biometrics
+- Rewrote authenticateAndRetrieve() to use simple biometric auth (no CryptoObject), then decrypt password directly after auth success
+- Changed allowed authenticators to BIOMETRIC_STRONG | BIOMETRIC_WEAK | DEVICE_CREDENTIAL for all biometric methods
+- Updated file input accept attribute from ".vault,.passvault" to ".vault,.passvault,.json,application/json,*/*" so Android file picker shows all files
+- Updated UI text from "Вход по отпечатку" to "Вход по биометрии" for universality
+- Bumped version to 5.2.0
+- Built APK, pushed to GitHub, created release v5.2.0
+
+Stage Summary:
+- Biometric auth now works with Class 2 (WEAK) + Class 3 (STRONG) + Device Credential (PIN/pattern)
+- File picker now shows all files including .vault backups
+- APK: /home/z/my-project/download/passvault.apk
+- GitHub Release: https://github.com/redbleach5/passvault/releases/tag/v5.2.0

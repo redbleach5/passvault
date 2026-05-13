@@ -84,7 +84,7 @@ async function renderDashboard() {
   try {
     const vault = await loadVault();
     const allServices = await getAllServices();
-    const search = (document.getElementById('search-input')?.value || '').toLowerCase();
+    const search = ((document.getElementById('search-input') || {}).value || '').toLowerCase();
 
     const credKeys = Object.keys(vault.credentials);
     const credCount = credKeys.length;
@@ -93,7 +93,7 @@ async function renderDashboard() {
     let goodCount = 0;
     let evaluatedCount = 0;
     credKeys.forEach(key => {
-      const pw = vault.credentials[key]?.password;
+      const pw = (vault.credentials[key] || {}).password;
       if (pw) {
         const strength = evaluatePasswordStrength(pw);
         evaluatedCount++;
@@ -338,7 +338,7 @@ async function openAddCredential() {
     if (item) selectServiceForAdd(item.dataset.svc);
   };
   openModal('modal-add-cred');
-  setTimeout(() => document.getElementById('add-cred-search')?.focus(), 100);
+  setTimeout(() => document.getElementById('add-cred-search') && document.getElementById('add-cred-search').focus(), 100);
 }
 
 function openAddCredentialFor(svcId) {

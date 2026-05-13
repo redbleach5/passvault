@@ -28,8 +28,8 @@ function getFilePickerPlugin() {
  * On Android: Opens system document picker (full filesystem access).
  * On web: Falls back to HTML file input.
  *
- * @param {Object} options - { mimeType: string } (default: '*/*')
- * @returns {Promise<{success: boolean, fileName?: string, textData?: string, base64Data?: string, size?: number, error?: string}>}
+ * @param {Object} options - mimeType string, default all types
+ * @returns {Promise<Object>} result with success, fileName, textData, size, error
  */
 async function pickFile(options = {}) {
   const plugin = getFilePickerPlugin();
@@ -87,8 +87,8 @@ async function pickFile(options = {}) {
  * On Android: Opens system save dialog (user chooses location).
  * On web: Falls back to <a download> approach.
  *
- * @param {Object} options - { fileName: string, data: string, mimeType?: string }
- * @returns {Promise<{success: boolean, fileName?: string, size?: number, error?: string}>}
+ * @param {Object} options - fileName, data, mimeType strings
+ * @returns {Promise<Object>} result with success, fileName, size, error
  */
 async function saveFile(options = {}) {
   const plugin = getFilePickerPlugin();

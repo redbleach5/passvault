@@ -83,13 +83,13 @@ async function renderWizardStep() {
       <div style="font-size:14px;font-weight:700;margin-bottom:8px">📋 Данные для копирования</div>
       <div class="copy-field">
         <span class="copy-label">Логин</span>
-        <span class="copy-value">${escHtml(cred?.username || '')}</span>
-        <button class="copy-btn" onclick="copyToClipboard('${escAttr(cred?.username || '')}')">Копировать</button>
+        <span class="copy-value">${escHtml((cred && cred.username) || '')}</span>
+        <button class="copy-btn" onclick="copyToClipboard('${escAttr((cred && cred.username) || '')}')">Копировать</button>
       </div>
       <div class="copy-field">
         <span class="copy-label">Текущий</span>
-        <span class="copy-value">${maskPassword(cred?.password || '')}</span>
-        <button class="copy-btn" onclick="copyToClipboard('${escAttr(cred?.password || '')}')">Копировать</button>
+        <span class="copy-value">${maskPassword((cred && cred.password) || '')}</span>
+        <button class="copy-btn" onclick="copyToClipboard('${escAttr((cred && cred.password) || '')}')">Копировать</button>
       </div>
       <div class="copy-field">
         <span class="copy-label">Новый</span>

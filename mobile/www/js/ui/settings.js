@@ -794,27 +794,27 @@ function renderCloudProviderContent(provider) {
 
         <div class="form-group">
           <label>Firebase API Key</label>
-          <input type="text" id="fb-apiKey" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="AIzaSy..." value="${escHtml(config?.apiKey || '')}">
+          <input type="text" id="fb-apiKey" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="AIzaSy..." value="${escHtml((config && config.apiKey) || '')}">
         </div>
         <div class="form-group">
           <label>Firebase Auth Domain</label>
-          <input type="text" id="fb-authDomain" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.firebaseapp.com" value="${escHtml(config?.authDomain || '')}">
+          <input type="text" id="fb-authDomain" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.firebaseapp.com" value="${escHtml((config && config.authDomain) || '')}">
         </div>
         <div class="form-group">
           <label>Firebase Project ID</label>
-          <input type="text" id="fb-projectId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project-id" value="${escHtml(config?.projectId || '')}">
+          <input type="text" id="fb-projectId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project-id" value="${escHtml((config && config.projectId) || '')}">
         </div>
         <div class="form-group">
           <label>Storage Bucket (необязательно)</label>
-          <input type="text" id="fb-storageBucket" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.appspot.com" value="${escHtml(config?.storageBucket || '')}">
+          <input type="text" id="fb-storageBucket" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.appspot.com" value="${escHtml((config && config.storageBucket) || '')}">
         </div>
         <div class="form-group">
           <label>Messaging Sender ID (необязательно)</label>
-          <input type="text" id="fb-messagingSenderId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="123456789" value="${escHtml(config?.messagingSenderId || '')}">
+          <input type="text" id="fb-messagingSenderId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="123456789" value="${escHtml((config && config.messagingSenderId) || '')}">
         </div>
         <div class="form-group">
           <label>App ID (необязательно)</label>
-          <input type="text" id="fb-appId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="1:123:web:abc" value="${escHtml(config?.appId || '')}">
+          <input type="text" id="fb-appId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="1:123:web:abc" value="${escHtml((config && config.appId) || '')}">
         </div>
 
         <button class="btn btn-primary" onclick="saveCloudConfig()" style="margin-bottom:12px">💾 Сохранить конфигурацию</button>
@@ -950,13 +950,13 @@ function fillWebdavPresetFn(presetId) {
     urlInput.placeholder = preset.placeholder;
     urlInput.value = '';
   }
-  urlInput?.focus();
+  urlInput && urlInput.focus();
 }
 
 async function doWebdavTestFn() {
-  const url = document.getElementById('wd-url')?.value.trim();
-  const username = document.getElementById('wd-username')?.value.trim();
-  const password = document.getElementById('wd-password')?.value;
+  const url = (document.getElementById('wd-url') || {}).value.trim();
+  const username = (document.getElementById('wd-username') || {}).value.trim();
+  const password = (document.getElementById('wd-password') || {}).value;
   showToast('Проверка подключения...');
   const result = await testWebDAVConnection(url, username, password);
   if (result.success) {
@@ -967,9 +967,9 @@ async function doWebdavTestFn() {
 }
 
 async function saveWebdavConfigFn() {
-  const url = document.getElementById('wd-url')?.value.trim();
-  const username = document.getElementById('wd-username')?.value.trim();
-  const password = document.getElementById('wd-password')?.value;
+  const url = (document.getElementById('wd-url') || {}).value.trim();
+  const username = (document.getElementById('wd-username') || {}).value.trim();
+  const password = (document.getElementById('wd-password') || {}).value;
 
   if (!url || !username || !password) {
     showToast('Заполните все поля');
@@ -1117,7 +1117,7 @@ async function toggleBiometric() {
 }
 
 async function confirmBiometricSetupFn() {
-  const pw = document.getElementById('bio-setup-pw')?.value;
+  const pw = (document.getElementById('bio-setup-pw') || {}).value;
   if (!pw) { showToast('Введите пароль'); return; }
 
   // Verify password

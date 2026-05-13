@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://fcmregistrations.googleapis.com https:; font-src 'self'; media-src 'none'; object-src 'none';">
-<!-- PassVault v5.6.0 — Fix auto-lock after vault creation, async storage race, pause auto-backup conflict -->
+<!-- PassVault v5.7.0 — Global error handler, full button resilience, all functions fallback -->
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -1526,7 +1526,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.5.0</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.7.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1606,7 +1606,7 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 5.5.0</div>
+        <div class="about-version">Версия 5.7.0</div>
         <div class="about-desc">
           PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
@@ -1708,6 +1708,21 @@ select.form-select:focus { border-color: var(--accent); }
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- Global error catcher for debugging -->
+<script>
+window.onerror=function(msg,url,line,col,err){
+  var d=document.getElementById('global-error-banner');
+  if(!d){d=document.createElement('div');d.id='global-error-banner';d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;padding:10px 16px;font-size:12px;font-family:monospace;max-height:30vh;overflow:auto;white-space:pre-wrap;';document.body.appendChild(d);}
+  d.textContent+='ERROR: '+msg+'\n  at '+url+':'+line+':'+col+'\n';
+  return false;
+};
+window.addEventListener('unhandledrejection',function(e){
+  var d=document.getElementById('global-error-banner');
+  if(!d){d=document.createElement('div');d.id='global-error-banner';d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;padding:10px 16px;font-size:12px;font-family:monospace;max-height:30vh;overflow:auto;white-space:pre-wrap;';document.body.appendChild(d);}
+  d.textContent+='REJECT: '+(e.reason?e.reason.message||e.reason:'unknown')+'\n';
+});
+</script>
 
 <!-- Inline fallback: setup button logic works even if ES modules fail to load -->
 <script>

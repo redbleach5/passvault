@@ -17,12 +17,23 @@ import { biometricUnlock, initBiometricUI } from './biometric.js';
 
 // ===== Setup =====
 
-document.getElementById('setup-pw1').addEventListener('input', function() {
-  updateStrengthMeter('setup-pw1', 'setup-strength-fill', 'setup-strength-text');
-  checkSetupMatch();
-});
-
-document.getElementById('setup-pw2').addEventListener('input', checkSetupMatch);
+// Register input event listeners for setup screen with error resilience
+function setupInputListeners() {
+  const pw1 = document.getElementById('setup-pw1');
+  const pw2 = document.getElementById('setup-pw2');
+  if (pw1) {
+    pw1.addEventListener('input', function() {
+      try {
+        updateStrengthMeter('setup-pw1', 'setup-strength-fill', 'setup-strength-text');
+      } catch(e) { console.warn('Strength meter error:', e); }
+      checkSetupMatch();
+    });
+  }
+  if (pw2) {
+    pw2.addEventListener('input', checkSetupMatch);
+  }
+}
+setupInputListeners();
 
 function checkSetupMatch() {
   const pw1 = document.getElementById('setup-pw1').value;
@@ -215,17 +226,21 @@ async function init() {
     if (!crypto || !crypto.subtle) {
       document.getElementById('setup-error').textContent = 'Web Crypto API недоступен. Откройте страницу по HTTPS или localhost.';
       document.getElementById('setup-error').style.display = 'block';
-      document.getElementById('setup-btn').disabled = true;
+      // Don't disable the button - let the user try. Web Crypto might become available.
+      // The doSetup function will check again and show a proper error.
     }
 
     const hash = localStorage.getItem('pv_hash');
     if (hash) {
       showScreen('screen-unlock');
       // Initialize biometric UI (show fingerprint button if available)
-      initBiometricUI();
+      try { await initBiometricUI(); } catch(e) { console.warn('Biometric UI init skipped:', e); }
     } else {
       showScreen('screen-setup');
     }
+
+    // Re-register input listeners after init (in case DOM wasn't ready earlier)
+    setupInputListeners();
   } catch(e) {
     console.error('PassVault init failed:', e);
     // Show a visible error message instead of a blank screen
@@ -260,6 +275,7 @@ document.addEventListener('pause', () => {
 });
 
 // Make functions globally available for onclick handlers
+window.checkSetupMatch = checkSetupMatch;
 window.doSetup = doSetup;
 window.doUnlock = doUnlock;
 window.doBiometricUnlock = doBiometricUnlock;

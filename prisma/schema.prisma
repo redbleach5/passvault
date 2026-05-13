@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../db/custom.db"
+}
+
+model Vault {
+  id         String   @id @default(cuid())
+  masterHash String
+  salt       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Credential {
+  id          String    @id @default(cuid())
+  serviceId   String
+  username    String
+  password    String
+  url         String?
+  notes       String?
+  lastChanged DateTime?
+  status      String    @default("active")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ServiceConfig {
+  id                      String   @id @default(cuid())
+  name                    String   @unique
+  displayName             String
+  category                String
+  iconUrl                 String?
+  passwordChangeUrl       String
+  loginUrl                String?
+  usernameSelector        String?
+  currentPasswordSelector String?
+  newPasswordSelector     String?
+  confirmPasswordSelector String?
+  submitSelector          String?
+  instructions            String?
+  twoFactorNote           String?
+  custom                  Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  serviceId String?
+  details   String?
+  createdAt DateTime @default(now())
+}

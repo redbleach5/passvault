@@ -76,3 +76,40 @@ Stage Summary:
 - APK: /home/z/my-project/download/passvault.apk
 - Release: https://github.com/redbleach5/passvault/releases/tag/v3.1.0
 - APK Download: https://github.com/redbleach5/passvault/releases/download/v3.1.0/passvault.apk
+
+---
+Task ID: 11-14
+Agent: Main Agent
+Task: Реализация экспорта/импорта .vault файла (Фаза 1 — резервное копирование)
+
+Work Log:
+- Добавлена секция «Резервное копирование» в Settings (web + mobile)
+- Реализована функция exportVault(): собирает vault, custom services, audit log, salt, hash → JSON .vault файл
+- Реализована функция importVault(): валидация формата, подтверждение, восстановление данных
+- Добавлен import-mode в doUnlock(): если импорт инициирован при заблокированном хранилище, ввод мастер-пароля от копии
+- Скрытый <input type="file"> для выбора .vault файла
+- Обе версии (web + mobile) синхронизированы
+- Версия обновлена до 3.2.0
+
+Stage Summary:
+- Формат .vault: JSON с E2E-шифрованием (AES-256-GCM), мастер-пароль НЕ включён
+- Файлы: public/passvault.html, mobile/www/index.html, mobile/package.json
+- Экспорт логируется в audit log
+
+---
+Task ID: 15
+Agent: Main Agent
+Task: Пересборка APK и обновление GitHub Release v3.2.0
+
+Work Log:
+- npx cap sync android — SUCCESS
+- ./gradlew assembleDebug — BUILD SUCCESSFUL
+- APK скопирован в /home/z/my-project/download/passvault.apk (4.2 MB)
+- git commit v3.2.0 + push + tag v3.2.0
+- Создан GitHub Release v3.2.0
+- APK загружен на GitHub Release
+
+Stage Summary:
+- APK: /home/z/my-project/download/passvault.apk (4.2 MB)
+- Release: https://github.com/redbleach5/passvault/releases/tag/v3.2.0
+- APK Download: https://github.com/redbleach5/passvault/releases/download/v3.2.0/passvault.apk

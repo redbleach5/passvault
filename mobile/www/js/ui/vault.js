@@ -10,7 +10,7 @@ import {
   showScreen, showToast, updateStrengthMeter, catBadge,
   openModal, closeModal, showConfirm,
   maskPassword, escHtml, escAttr, copyToClipboard, toggleVis
-} from './ui.js';
+} from '../ui.js';
 import { lockVault, startAutoLock } from './screens.js';
 
 // ===== Data helpers =====

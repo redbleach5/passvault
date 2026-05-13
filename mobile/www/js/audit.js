@@ -26,7 +26,7 @@ async function auditLog(action, serviceId, details, result) {
       platform: navigator.platform || null
     };
 
-    if (state.state.masterKey) {
+    if (state.masterKey) {
       const raw = localStorage.getItem('pv_audit');
       let logs = [];
       if (raw) {

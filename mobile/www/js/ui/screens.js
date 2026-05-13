@@ -3,7 +3,7 @@
  */
 
 import { state } from '../state.js';
-import { showScreen, showToast, updateThemeToggle } from './ui.js';
+import { showScreen, showToast } from '../ui.js';
 import { auditLog } from '../audit.js';
 import { syncToSecureStorage } from '../storage.js';
 
@@ -34,7 +34,7 @@ function toggleTheme() {
   updateThemeToggle();
 }
 
-function updateThemeToggle() {
+async function updateThemeToggle() {
   const theme = document.documentElement.getAttribute('data-theme');
   const toggle = document.getElementById('theme-toggle');
   const status = document.getElementById('theme-status');

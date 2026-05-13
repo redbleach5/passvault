@@ -49,7 +49,8 @@ const _origLocalStorageRemove = localStorage.removeItem.bind(localStorage);
 
 const SENSITIVE_KEYS = [
   'pv_salt', 'pv_hash', 'pv_vault', 'pv_custom_services',
-  'pv_audit', 'pv_format', 'pv_failed_attempts', 'pv_lockout_until'
+  'pv_audit', 'pv_audit_plain', 'pv_format', 'pv_failed_attempts',
+  'pv_lockout_until', 'pv_theme'
 ];
 
 localStorage.setItem = function(key, value) {

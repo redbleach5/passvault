@@ -4,7 +4,7 @@
 
 import { state } from '../state.js';
 import { generatePasswordString, evaluatePasswordStrength } from '../crypto.js';
-import { copyToClipboard } from './ui.js';
+import { copyToClipboard } from '../ui.js';
 
 function updateGenLength() {
   document.getElementById('gen-length-val').textContent = document.getElementById('gen-length').value;

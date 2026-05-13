@@ -8,7 +8,7 @@ import { auditLog } from '../audit.js';
 import {
   showScreen, showToast, updateStrengthMeter, toggleVis,
   escHtml, escAttr, maskPassword, copyToClipboard
-} from './ui.js';
+} from '../ui.js';
 
 function startWizard(svcId) {
   state.wizardServiceId = svcId;

@@ -1,5 +1,5 @@
 /**
- * ui/settings.js — Settings, export/import, audit log, security info, custom services
+ * ui/settings.js — Settings, export/import, audit log, security info, custom services, cloud
  */
 
 import { state } from '../state.js';
@@ -9,9 +9,15 @@ import { auditLog, getAllAuditLogs } from '../audit.js';
 import {
   showScreen, showToast, openModal, closeModal, showConfirm,
   escHtml
-} from './ui.js';
+} from '../ui.js';
 import { lockVault } from './screens.js';
 import { loadVault, saveVault, loadCustomServices, saveCustomServices, getAllServices, renderDashboard } from './vault.js';
+import {
+  initFirebase, getFirebaseConfig, saveFirebaseConfig,
+  cloudRegister, cloudLogin, cloudLogout,
+  cloudUpload, cloudDownload, cloudStatus,
+  isCloudConfigured, isCloudAuthenticated
+} from '../cloud.js';
 
 // ===== Export / Import =====
 
@@ -239,7 +245,7 @@ function showSecurityInfo() {
     '<div class="cred-field"><div class="cred-label">Защита от брутфорса</div><div class="cred-value">5 попыток, затем блокировка 15 мин</div></div>' +
     '<div class="cred-field"><div class="cred-label">Очистка буфера</div><div class="cred-value">Через 30 секунд после копирования</div></div>' +
     '<div class="cred-field"><div class="cred-label">Сравнение хэшей</div><div class="cred-value">Constant-time (защита от timing-атак)</div></div>' +
-    '<div class="cred-field"><div class="cred-label">Данные</div><div class="cred-value">Хранятся только локально на устройстве</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Данные</div><div class="cred-value">Локально на устройстве + облако (опционально)</div></div>' +
     '<div class="cred-field"><div class="cred-label">CSP</div><div class="cred-value">Content-Security-Policy включена</div></div>' +
   '</div>';
   openModal('modal-security');
@@ -247,6 +253,180 @@ function showSecurityInfo() {
 
 function showAbout() {
   openModal('modal-about');
+}
+
+// ===== Cloud Sync =====
+
+function showCloudSettings() {
+  const body = document.getElementById('cloud-settings-body');
+  const config = getFirebaseConfig();
+  const configured = !!(config && config.apiKey);
+
+  body.innerHTML = `
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="font-size:40px">☁️</div>
+      <div style="font-size:16px;font-weight:700;margin-top:4px">Облачная синхронизация</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Данные шифруются перед отправкой. Сервер не видит пароли.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Firebase API Key</label>
+      <input type="text" id="fb-apiKey" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="AIzaSy..." value="${escHtml(config?.apiKey || '')}">
+    </div>
+    <div class="form-group">
+      <label>Firebase Auth Domain</label>
+      <input type="text" id="fb-authDomain" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.firebaseapp.com" value="${escHtml(config?.authDomain || '')}">
+    </div>
+    <div class="form-group">
+      <label>Firebase Project ID</label>
+      <input type="text" id="fb-projectId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project-id" value="${escHtml(config?.projectId || '')}">
+    </div>
+    <div class="form-group">
+      <label>Storage Bucket (необязательно)</label>
+      <input type="text" id="fb-storageBucket" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.appspot.com" value="${escHtml(config?.storageBucket || '')}">
+    </div>
+    <div class="form-group">
+      <label>Messaging Sender ID (необязательно)</label>
+      <input type="text" id="fb-messagingSenderId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="123456789" value="${escHtml(config?.messagingSenderId || '')}">
+    </div>
+    <div class="form-group">
+      <label>App ID (необязательно)</label>
+      <input type="text" id="fb-appId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="1:123:web:abc" value="${escHtml(config?.appId || '')}">
+    </div>
+
+    <button class="btn btn-primary" onclick="saveCloudConfig()" style="margin-bottom:12px">💾 Сохранить конфигурацию</button>
+
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Аккаунт</div>
+      <div id="cloud-auth-status" style="margin-bottom:12px">
+        ${isCloudAuthenticated() ? '<div style="color:var(--accent);font-size:13px">✓ Авторизован</div>' : '<div style="color:var(--text-muted);font-size:13px">Не авторизован</div>'}
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="cloud-email" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>Пароль</label>
+        <input type="password" id="cloud-password" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Пароль облака (минимум 6 символов)">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudRegister()">Регистрация</button>
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudLogin()">Войти</button>
+      </div>
+      ${isCloudAuthenticated() ? '<button class="btn btn-outline btn-sm" style="width:100%;margin-top:8px" onclick="doCloudLogout()">🚪 Выйти из облака</button>' : ''}
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Синхронизация</div>
+      <div id="cloud-sync-status" style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Загрузка статуса...</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudUpload()">⬆️ Загрузить в облако</button>
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudDownload()">⬇️ Скачать из облака</button>
+      </div>
+    </div>
+  `;
+
+  openModal('modal-cloud-settings');
+
+  // Load cloud status
+  if (isCloudConfigured() && isCloudAuthenticated()) {
+    cloudStatus().then(status => {
+      const el = document.getElementById('cloud-sync-status');
+      if (el) {
+        if (status.hasCloudData) {
+          el.innerHTML = `<span style="color:var(--accent)">✓ Облачная копия существует</span><br>Последняя синхронизация: ${escHtml(status.lastSyncAt || 'Неизвестно')}`;
+        } else {
+          el.innerHTML = '<span style="color:var(--warning)">Облачная копия не найдена</span>';
+        }
+      }
+    }).catch(() => {
+      const el = document.getElementById('cloud-sync-status');
+      if (el) el.textContent = 'Не удалось подключиться к облаку';
+    });
+  } else {
+    const el = document.getElementById('cloud-sync-status');
+    if (el) el.textContent = 'Настройте Firebase и авторизуйтесь';
+  }
+}
+
+async function saveCloudConfigFn() {
+  const config = {
+    apiKey: document.getElementById('fb-apiKey').value.trim(),
+    authDomain: document.getElementById('fb-authDomain').value.trim(),
+    projectId: document.getElementById('fb-projectId').value.trim(),
+    storageBucket: document.getElementById('fb-storageBucket').value.trim(),
+    messagingSenderId: document.getElementById('fb-messagingSenderId').value.trim(),
+    appId: document.getElementById('fb-appId').value.trim()
+  };
+
+  if (!config.apiKey || !config.projectId) {
+    showToast('Заполните минимум API Key и Project ID');
+    return;
+  }
+
+  saveFirebaseConfig(config);
+  const result = await initFirebase(config);
+  if (result.success) {
+    showToast('Firebase настроен!');
+    auditLog('cloud_config', null, null, 'success');
+  } else {
+    showToast('Ошибка Firebase: ' + (result.error || ''));
+  }
+}
+
+async function doCloudRegisterFn() {
+  const email = document.getElementById('cloud-email').value.trim();
+  const password = document.getElementById('cloud-password').value;
+  if (!email || !password) { showToast('Заполните email и пароль'); return; }
+  const result = await cloudRegister(email, password);
+  if (result.success) {
+    showToast('Регистрация успешна!');
+    showCloudSettings(); // refresh UI
+  } else {
+    showToast(result.error || 'Ошибка регистрации');
+  }
+}
+
+async function doCloudLoginFn() {
+  const email = document.getElementById('cloud-email').value.trim();
+  const password = document.getElementById('cloud-password').value;
+  if (!email || !password) { showToast('Заполните email и пароль'); return; }
+  const result = await cloudLogin(email, password);
+  if (result.success) {
+    showToast('Вход выполнен!');
+    showCloudSettings(); // refresh UI
+  } else {
+    showToast(result.error || 'Ошибка входа');
+  }
+}
+
+async function doCloudLogoutFn() {
+  await cloudLogout();
+  showToast('Вы вышли из облака');
+  showCloudSettings();
+}
+
+async function doCloudUploadFn() {
+  if (!state.masterKey) { showToast('Сначала разблокируйте хранилище'); return; }
+  showToast('Загрузка в облако...');
+  const result = await cloudUpload();
+  if (result.success) {
+    showToast('✓ Данные загружены в облако');
+  } else {
+    showToast(result.error || 'Ошибка загрузки');
+  }
+}
+
+async function doCloudDownloadFn() {
+  showConfirm('Скачать из облака?', 'Локальные данные будут заменены данными из облака. Продолжить?', 'Скачать', async () => {
+    const result = await cloudDownload();
+    if (result.success) {
+      showToast('✓ Данные скачаны. Разблокируйте хранилище.');
+      lockVault();
+    } else {
+      showToast(result.error || 'Ошибка загрузки');
+    }
+  });
 }
 
 // Make globally available for onclick handlers
@@ -259,9 +439,16 @@ window.showAuditLog = showAuditLog;
 window.showSecurityInfo = showSecurityInfo;
 window.showAbout = showAbout;
 window.lockVault = lockVault;
+window.showCloudSettings = showCloudSettings;
+window.saveCloudConfig = saveCloudConfigFn;
+window.doCloudRegister = doCloudRegisterFn;
+window.doCloudLogin = doCloudLoginFn;
+window.doCloudLogout = doCloudLogoutFn;
+window.doCloudUpload = doCloudUploadFn;
+window.doCloudDownload = doCloudDownloadFn;
 
 export {
   exportVault, triggerImportVault, handleImportFile, doImportVault,
   openAddCustomService, saveCustomService,
-  showAuditLog, showSecurityInfo, showAbout
+  showAuditLog, showSecurityInfo, showAbout, showCloudSettings
 };

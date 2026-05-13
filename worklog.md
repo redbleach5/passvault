@@ -113,3 +113,26 @@ Stage Summary:
 - APK: /home/z/my-project/download/passvault.apk (4.2 MB)
 - Release: https://github.com/redbleach5/passvault/releases/tag/v3.2.0
 - APK Download: https://github.com/redbleach5/passvault/releases/download/v3.2.0/passvault.apk
+
+---
+Task ID: 1
+Agent: main
+Task: Fix SecureStore.setItem is not a function and other bugs in PassVault
+
+Work Log:
+- Identified root cause: localStorage override called `SecureStore.setItem()` instead of `SecureStorage.setItem()` — the raw Capacitor plugin uses `set/get/delete`, not `setItem/getItem/removeItem`
+- Fixed localStorage override to use `SecureStorage` wrapper (correct API) instead of `SecureStore` (raw plugin)
+- Fixed localStorage.setItem to also write to `_origLocalStorageSet()` for sync reads
+- Fixed `init()` to be async and `await preLoadSecureData()` — race condition caused setup screen to always show on mobile
+- Fixed missing `.test(pw)` in password strength evaluation (`/^[A-Z]+$/` was always truthy)
+- Fixed import vault audit logged unencrypted (swapped `lockVault()` and `auditLog()` order)
+- Fixed duplicate event listeners on every lock/unlock cycle (added `_autoLockListenersAdded` flag)
+- Fixed negative remaining attempts count (`Math.max(0, ...)`)
+- Updated version to 3.2.1 in both web and mobile versions
+- Rebuilt APK and pushed to GitHub
+- Created GitHub release v3.2.1 with APK
+
+Stage Summary:
+- All 7 bugs fixed in both web and mobile versions
+- APK rebuilt: `/home/z/my-project/download/passvault.apk` (4.2 MB)
+- GitHub release: https://github.com/redbleach5/passvault/releases/tag/v3.2.1

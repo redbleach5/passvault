@@ -255,6 +255,257 @@ function showAbout() {
   openModal('modal-about');
 }
 
+// ===== Password Health Check =====
+
+async function showPasswordHealth() {
+  if (!state.masterKey) {
+    showToast('Сначала разблокируйте хранилище');
+    return;
+  }
+  try {
+    const vault = await loadVault();
+    const allSvc = await getAllServices();
+    const creds = vault.credentials || {};
+    const credKeys = Object.keys(creds);
+
+    if (credKeys.length === 0) {
+      showToast('Хранилище пусто');
+      return;
+    }
+
+    // Evaluate each credential
+    const items = [];
+    const passwordMap = {}; // password -> [svcId, ...] for duplicate detection
+    const weakWarnings = [];
+    const duplicateWarnings = [];
+    const oldWarnings = [];
+    const now = Date.now();
+    const OLD_THRESHOLD = 180 * 24 * 60 * 60 * 1000; // 180 days in ms
+
+    credKeys.forEach(svcId => {
+      const cred = creds[svcId];
+      const svc = allSvc.find(s => s.id === svcId);
+      const strength = evaluatePasswordStrength(cred.password);
+
+      items.push({
+        svcId,
+        displayName: svc ? svc.displayName : svcId,
+        iconEmoji: svc ? svc.iconEmoji : '🔑',
+        username: cred.username || '',
+        strength,
+        updatedAt: cred.updatedAt || null
+      });
+
+      // Track duplicates
+      if (!passwordMap[cred.password]) passwordMap[cred.password] = [];
+      passwordMap[cred.password].push(svcId);
+
+      // Weak password warning
+      if (strength.score <= 1) {
+        weakWarnings.push(svcId);
+      }
+
+      // Old password warning
+      if (cred.updatedAt && (now - cred.updatedAt > OLD_THRESHOLD)) {
+        const daysSince = Math.floor((now - cred.updatedAt) / (24 * 60 * 60 * 1000));
+        oldWarnings.push({ svcId, daysSince });
+      }
+    });
+
+    // Find duplicate passwords
+    Object.entries(passwordMap).forEach(([pw, svcIds]) => {
+      if (svcIds.length > 1) {
+        duplicateWarnings.push({ password: pw, svcIds });
+      }
+    });
+
+    const duplicateSvcIdSet = new Set();
+    duplicateWarnings.forEach(dw => dw.svcIds.forEach(id => duplicateSvcIdSet.add(id)));
+
+    // Overall health score: percentage of passwords with score >= 3
+    const strongCount = items.filter(i => i.strength.score >= 3).length;
+    const healthPercent = Math.round((strongCount / items.length) * 100);
+
+    // Strength dot + label helper
+    const strengthDot = (s) => `<span style="color:${s.color};font-size:14px">●</span> <span style="font-size:12px;color:var(--text-secondary)">${escHtml(s.label)}</span>`;
+
+    // Build credential list items
+    const listHtml = items.map(item => {
+      const isWeak = item.strength.score <= 1;
+      const isDuplicate = duplicateSvcIdSet.has(item.svcId);
+      const isOld = oldWarnings.some(ow => ow.svcId === item.svcId);
+      let bgColor = '';
+      if (isWeak) bgColor = 'background:rgba(239,68,68,0.08);';
+      else if (isDuplicate) bgColor = 'background:rgba(245,158,11,0.08);';
+
+      let badges = '';
+      if (isWeak) badges += '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,0.15);color:#ef4444;margin-left:4px">Слабый</span>';
+      if (isDuplicate) badges += '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(245,158,11,0.15);color:#f59e0b;margin-left:4px">Дубликат</span>';
+      if (isOld) badges += '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(107,114,128,0.15);color:#6b7280;margin-left:4px">Устарел</span>';
+
+      return `<div class="cred-field" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:6px;${bgColor}">
+        <div style="font-size:20px">${item.iconEmoji}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${escHtml(item.displayName)}${badges}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escHtml(item.username)}</div>
+        </div>
+        <div style="flex-shrink:0">${strengthDot(item.strength)}</div>
+      </div>`;
+    }).join('');
+
+    // Build warnings section
+    let warningsHtml = '';
+    if (weakWarnings.length > 0 || duplicateWarnings.length > 0 || oldWarnings.length > 0) {
+      warningsHtml = '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">';
+      warningsHtml += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">⚠️ Предупреждения</div>';
+
+      if (weakWarnings.length > 0) {
+        warningsHtml += `<div style="font-size:12px;color:#ef4444;margin-bottom:4px">🔒 Слабые пароли (${weakWarnings.length}): ${weakWarnings.map(id => {
+          const svc = allSvc.find(s => s.id === id);
+          return escHtml(svc ? svc.displayName : id);
+        }).join(', ')}</div>`;
+      }
+
+      if (duplicateWarnings.length > 0) {
+        duplicateWarnings.forEach(dw => {
+          warningsHtml += `<div style="font-size:12px;color:#f59e0b;margin-bottom:4px">🔄 Одинаковый пароль: ${dw.svcIds.map(id => {
+            const svc = allSvc.find(s => s.id === id);
+            return escHtml(svc ? svc.displayName : id);
+          }).join(', ')}</div>`;
+        });
+      }
+
+      if (oldWarnings.length > 0) {
+        oldWarnings.forEach(ow => {
+          const svc = allSvc.find(s => s.id === ow.svcId);
+          warningsHtml += `<div style="font-size:12px;color:#6b7280;margin-bottom:4px">⏰ Не обновлён ${ow.daysSince} дн.: ${escHtml(svc ? svc.displayName : ow.svcId)}</div>`;
+        });
+      }
+
+      warningsHtml += '</div>';
+    }
+
+    // Health score color
+    const scoreColor = healthPercent >= 75 ? '#22c55e' : healthPercent >= 50 ? '#f59e0b' : '#ef4444';
+
+    const body = document.getElementById('password-health-body');
+    body.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:48px;font-weight:800;color:${scoreColor}">${healthPercent}%</div>
+        <div style="font-size:14px;font-weight:600;margin-top:4px">Общая оценка безопасности</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${strongCount} из ${items.length} паролей — надёжные</div>
+      </div>
+      ${listHtml}
+      ${warningsHtml}
+    `;
+
+    openModal('modal-password-health');
+    await auditLog('password_health', null, `Health check: ${healthPercent}% (${strongCount}/${items.length} strong)`, 'success');
+  } catch(e) {
+    showToast('Ошибка проверки паролей');
+    console.error('Password health error:', e);
+  }
+}
+
+// ===== Auto-lock Settings =====
+
+function showAutoLockSettings() {
+  const currentAutoLockMs = state.AUTO_LOCK_MS || 5 * 60 * 1000;
+  const currentTTLms = state.MASTER_KEY_TTL_MS || 30 * 60 * 1000;
+
+  const timeoutOptions = [
+    { value: 1 * 60 * 1000, label: '1 мин' },
+    { value: 3 * 60 * 1000, label: '3 мин' },
+    { value: 5 * 60 * 1000, label: '5 мин' },
+    { value: 10 * 60 * 1000, label: '10 мин' },
+    { value: 15 * 60 * 1000, label: '15 мин' }
+  ];
+  const ttlOptions = [
+    { value: 15 * 60 * 1000, label: '15 мин' },
+    { value: 30 * 60 * 1000, label: '30 мин' },
+    { value: 60 * 60 * 1000, label: '60 мин' }
+  ];
+
+  const timeoutIdx = timeoutOptions.findIndex(o => o.value === currentAutoLockMs);
+  const ttlIdx = ttlOptions.findIndex(o => o.value === currentTTLms);
+
+  const body = document.getElementById('autolock-body');
+  body.innerHTML = `
+    <div style="padding:8px 0">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:32px">🔒</div>
+        <div style="font-size:16px;font-weight:700;margin-top:4px">Автоблокировка</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Настройте таймауты автоматической блокировки</div>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex;justify-content:space-between;align-items:center">
+          <span>Блокировка при бездействии</span>
+          <span id="autolock-timeout-label" style="font-size:13px;color:var(--accent);font-weight:600">${timeoutOptions[Math.max(0, timeoutIdx)].label}</span>
+        </label>
+        <input type="range" id="autolock-timeout-slider" min="0" max="${timeoutOptions.length - 1}" value="${Math.max(0, timeoutIdx)}" style="width:100%;accent-color:var(--accent)">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:2px">
+          ${timeoutOptions.map(o => `<span>${o.label}</span>`).join('')}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:20px">
+        <label style="display:flex;justify-content:space-between;align-items:center">
+          <span>Время жизни мастер-ключа</span>
+          <span id="autolock-ttl-label" style="font-size:13px;color:var(--accent);font-weight:600">${ttlOptions[Math.max(0, ttlIdx)].label}</span>
+        </label>
+        <input type="range" id="autolock-ttl-slider" min="0" max="${ttlOptions.length - 1}" value="${Math.max(0, ttlIdx)}" style="width:100%;accent-color:var(--accent)">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:2px">
+          ${ttlOptions.map(o => `<span>${o.label}</span>`).join('')}
+        </div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-top:20px" onclick="saveAutoLockSettings()">💾 Сохранить настройки</button>
+    </div>
+  `;
+
+  // Wire up slider labels
+  const timeoutSlider = document.getElementById('autolock-timeout-slider');
+  const ttlSlider = document.getElementById('autolock-ttl-slider');
+
+  timeoutSlider.addEventListener('input', () => {
+    const idx = parseInt(timeoutSlider.value);
+    document.getElementById('autolock-timeout-label').textContent = timeoutOptions[idx].label;
+  });
+
+  ttlSlider.addEventListener('input', () => {
+    const idx = parseInt(ttlSlider.value);
+    document.getElementById('autolock-ttl-label').textContent = ttlOptions[idx].label;
+  });
+
+  // Store options on window for save handler
+  window._autoLockTimeoutOptions = timeoutOptions;
+  window._autoLockTTLOptions = ttlOptions;
+
+  openModal('modal-autolock');
+}
+
+function saveAutoLockSettings() {
+  const timeoutIdx = parseInt(document.getElementById('autolock-timeout-slider').value);
+  const ttlIdx = parseInt(document.getElementById('autolock-ttl-slider').value);
+
+  const timeoutOptions = window._autoLockTimeoutOptions;
+  const ttlOptions = window._autoLockTTLOptions;
+
+  const autoLockMs = timeoutOptions[timeoutIdx].value;
+  const ttlMs = ttlOptions[ttlIdx].value;
+
+  state.AUTO_LOCK_MS = autoLockMs;
+  state.MASTER_KEY_TTL_MS = ttlMs;
+
+  localStorage.setItem('pv_auto_lock_ms', String(autoLockMs));
+  localStorage.setItem('pv_master_key_ttl_ms', String(ttlMs));
+
+  closeModal('modal-autolock');
+  showToast('Настройки автоблокировки сохранены');
+  auditLog('autolock_settings', null, `Timeout: ${timeoutOptions[timeoutIdx].label}, TTL: ${ttlOptions[ttlIdx].label}`, 'success');
+}
+
 // ===== Cloud Sync =====
 
 function showCloudSettings() {
@@ -446,9 +697,13 @@ window.doCloudLogin = doCloudLoginFn;
 window.doCloudLogout = doCloudLogoutFn;
 window.doCloudUpload = doCloudUploadFn;
 window.doCloudDownload = doCloudDownloadFn;
+window.showPasswordHealth = showPasswordHealth;
+window.showAutoLockSettings = showAutoLockSettings;
+window.saveAutoLockSettings = saveAutoLockSettings;
 
 export {
   exportVault, triggerImportVault, handleImportFile, doImportVault,
   openAddCustomService, saveCustomService,
-  showAuditLog, showSecurityInfo, showAbout, showCloudSettings
+  showAuditLog, showSecurityInfo, showAbout, showCloudSettings,
+  showPasswordHealth, showAutoLockSettings
 };

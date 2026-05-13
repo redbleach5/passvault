@@ -7,7 +7,7 @@ import { deriveKeyAndHash, constantTimeEqual, migrateVaultIfNeeded } from './cry
 import { preLoadSecureData, syncToSecureStorage } from './storage.js';
 import { auditLog } from './audit.js';
 import { showScreen, showToast, updateStrengthMeter, closeConfirm, confirmAction, toggleVis, closeModal } from './ui.js';
-import { lockVault, startAutoLock, enterApp, switchTab, toggleTheme } from './ui/screens.js';
+import { lockVault, startAutoLock, enterApp, switchTab, toggleTheme, initTheme } from './ui/screens.js';
 import { renderDashboard, saveVault } from './ui/vault.js';
 import { generatePassword } from './ui/generator.js';
 // Import settings module to register all onclick handlers on window
@@ -181,6 +181,7 @@ async function doUnlock() {
 // ===== Init =====
 
 async function init() {
+  initTheme();
   await preLoadSecureData();
 
   if (!crypto || !crypto.subtle) {
@@ -195,9 +196,6 @@ async function init() {
   } else {
     showScreen('screen-setup');
   }
-
-  const theme = localStorage.getItem('pv_theme') || 'dark';
-  document.documentElement.setAttribute('data-theme', theme);
 }
 
 // ===== Global event handlers =====

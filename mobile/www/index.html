@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://fcmregistrations.googleapis.com; font-src 'self'; media-src 'none'; object-src 'none';">
-<!-- PassVault v4.1.1 — Fix settings buttons + modular architecture -->
+<!-- PassVault v5.0.0 — UX overhaul: health check, presets, quick actions, system theme -->
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -844,6 +844,9 @@ body {
 
 .toggle-switch.on::after { transform: translateX(20px); }
 
+.toggle-switch.half { background: var(--warning, #f0a500); }
+.toggle-switch.half::after { transform: translateX(10px); }
+
 /* Settings */
 .settings-group {
   padding: 0 20px;
@@ -1180,6 +1183,131 @@ select.form-select:focus { border-color: var(--accent); }
   cursor: pointer;
   white-space: nowrap;
 }
+
+/* Generator presets */
+.gen-presets {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 12px;
+  justify-content: center;
+}
+
+.gen-preset-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gen-preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+.gen-preset-chip.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+
+/* Toggle half state (system theme) */
+.toggle-switch.half { background: var(--warning, #f59e0b); }
+.toggle-switch.half::after { transform: translateX(10px); }
+
+/* Health dot indicator */
+.health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* Quick copy button on cards */
+.svc-quick-copy {
+  font-size: 16px;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.svc-quick-copy:hover { background: var(--accent-light); color: var(--accent); }
+.svc-quick-copy:active { transform: scale(0.9); }
+
+/* Password health modal items */
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+.health-item-weak { background: rgba(239,68,68,0.08); }
+.health-item-duplicate { background: rgba(245,158,11,0.08); }
+.health-item-old { background: rgba(100,116,139,0.08); }
+
+.health-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.health-badge-weak { background: rgba(239,68,68,0.15); color: #ef4444; }
+.health-badge-duplicate { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.health-badge-old { background: rgba(100,116,139,0.15); color: #94a3b8; }
+
+/* Autolock slider options */
+.autolock-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.autolock-option {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.autolock-option.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.autolock-option:hover { border-color: var(--accent); }
+
+/* Onboarding empty state */
+.onboarding-btn {
+  margin-top: 16px;
+  padding: 12px 24px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.onboarding-btn:hover { background: var(--accent-hover); }
 </style>
 </head>
 <body>
@@ -1273,6 +1401,7 @@ select.form-select:focus { border-color: var(--accent); }
         </div>
       </div>
       <div class="gen-section">
+        <div class="gen-presets" id="gen-presets"></div>
         <div class="gen-section-title">Параметры</div>
         <div class="slider-row">
           <span>Длина</span>
@@ -1311,6 +1440,13 @@ select.form-select:focus { border-color: var(--accent); }
       </div>
       <div class="settings-group">
         <div class="settings-group-title">Безопасность</div>
+        <div class="settings-item" onclick="showPasswordHealth()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">❤️</div>
+            <div class="settings-item-text"><h3>Здоровье паролей</h3><p>Проверка силы и дубликатов</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
         <div class="settings-item" onclick="showAuditLog()">
           <div class="settings-item-left">
             <div class="settings-item-icon">📋</div>
@@ -1322,6 +1458,13 @@ select.form-select:focus { border-color: var(--accent); }
           <div class="settings-item-left">
             <div class="settings-item-icon">🛡️</div>
             <div class="settings-item-text"><h3>Информация о безопасности</h3><p>Шифрование и защита</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+        <div class="settings-item" onclick="showAutoLockSettings()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">⏱️</div>
+            <div class="settings-item-text"><h3>Автоблокировка</h3><p>Таймаут и время жизни ключа</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1375,7 +1518,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 4.1.1</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.0.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1455,7 +1598,7 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 4.1.1</div>
+        <div class="about-version">Версия 5.0.0</div>
         <div class="about-desc">
           PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
@@ -1497,7 +1640,28 @@ select.form-select:focus { border-color: var(--accent); }
   </div>
 </div>
 
-<!-- CONFIRM DIALOG -->
+<!-- PASSWORD HEALTH MODAL -->
+<div class="modal-overlay" id="modal-password-health">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Здоровье паролей</h2>
+      <button class="modal-close" onclick="closeModal('modal-password-health')">✕</button>
+    </div>
+    <div class="modal-body" id="password-health-body"></div>
+  </div>
+</div>
+
+<!-- AUTOLOCK SETTINGS MODAL -->
+<div class="modal-overlay" id="modal-autolock">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Автоблокировка</h2>
+      <button class="modal-close" onclick="closeModal('modal-autolock')">✕</button>
+    </div>
+    <div class="modal-body" id="autolock-body"></div>
+  </div>
+</div>
+
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
     <h3 id="confirm-title"></h3>

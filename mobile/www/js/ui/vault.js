@@ -4,7 +4,7 @@
 
 import { state } from '../state.js';
 import { SERVICES, CATEGORIES } from '../services.js';
-import { encrypt, decryptData, generatePasswordString } from '../crypto.js';
+import { encrypt, decryptData, generatePasswordString, evaluatePasswordStrength } from '../crypto.js';
 import { auditLog } from '../audit.js';
 import {
   showScreen, showToast, updateStrengthMeter, catBadge,
@@ -80,12 +80,31 @@ async function renderDashboard() {
   const allServices = await getAllServices();
   const search = (document.getElementById('search-input')?.value || '').toLowerCase();
 
-  const credCount = Object.keys(vault.credentials).length;
-  const svcWithCreds = new Set(Object.keys(vault.credentials)).size;
+  const credKeys = Object.keys(vault.credentials);
+  const credCount = credKeys.length;
+
+  // Password health score: percentage of passwords with score >= 3 (Good/Excellent)
+  let goodCount = 0;
+  let evaluatedCount = 0;
+  credKeys.forEach(key => {
+    const pw = vault.credentials[key]?.password;
+    if (pw) {
+      const strength = evaluatePasswordStrength(pw);
+      evaluatedCount++;
+      if (strength.score >= 3) goodCount++;
+    }
+  });
+  const healthPct = evaluatedCount > 0 ? Math.round((goodCount / evaluatedCount) * 100) : 0;
+  const healthColor = healthPct >= 75 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#ef4444';
+
+  // Services without credentials
+  const svcIdsWithCreds = new Set(credKeys);
+  const withoutCredCount = allServices.filter(s => !svcIdsWithCreds.has(s.id)).length;
+
   document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${svcWithCreds}</div><div class="stat-label">Активных</div></div>
-    <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Записей</div></div>
-    <div class="stat-card"><div class="stat-num">${allServices.length}</div><div class="stat-label">Сервисов</div></div>
+    <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Сохранено</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:${healthColor}">${healthPct}%</div><div class="stat-label">Здоровье паролей</div></div>
+    <div class="stat-card"><div class="stat-num">${withoutCredCount}</div><div class="stat-label">Без пароля</div></div>
   `;
 
   const cats = ['all', ...Object.keys(CATEGORIES)];
@@ -97,6 +116,18 @@ async function renderDashboard() {
   let filtered = allServices;
   if (state.currentCategory !== 'all') filtered = filtered.filter(s => s.category === state.currentCategory);
   if (search) filtered = filtered.filter(s => s.name.toLowerCase().includes(search) || s.displayName.toLowerCase().includes(search));
+
+  if (filtered.length === 0 && credCount === 0) {
+    // First-time user — helpful empty state with action
+    document.getElementById('cards-list').innerHTML = `
+      <div class="empty-state" style="text-align:center;padding:40px 20px;">
+        <div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div>
+        <h3 style="margin:0 0 8px;">Начните добавлять пароли</h3>
+        <p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p>
+        <button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Нажмите чтобы добавить первый сервис</button>
+      </div>`;
+    return;
+  }
 
   if (filtered.length === 0) {
     document.getElementById('cards-list').innerHTML = `
@@ -112,12 +143,15 @@ async function renderDashboard() {
     const cred = vault.credentials[svc.id];
     const safeId = escHtml(svc.id);
     if (cred) {
+      const strength = evaluatePasswordStrength(cred.password);
+      const dotColor = strength.score >= 3 ? '#22c55e' : strength.score === 2 ? '#f59e0b' : '#ef4444';
       return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
         <div class="svc-icon">${svc.iconEmoji}</div>
         <div class="svc-info">
           <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
-          <div class="svc-detail">${escHtml(cred.username)} \u00b7 ${escHtml(maskPassword(cred.password))}</div>
+          <div class="svc-detail"><span style="color:${dotColor};margin-right:4px;">●</span>${escHtml(cred.username)} \u00b7 ${escHtml(maskPassword(cred.password))}</div>
         </div>
+        <button class="svc-action-btn" style="font-size:12px;padding:4px 8px;" data-action="quick-copy-pw" data-svc="${safeId}" title="Скопировать пароль">📋</button>
       </div>`;
     } else {
       return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
@@ -132,10 +166,21 @@ async function renderDashboard() {
   }).join('');
 
   document.getElementById('cards-list').onclick = function(e) {
-    const card = e.target.closest('[data-action]');
-    if (!card) return;
-    if (card.dataset.action === 'detail') openDetail(card.dataset.svc);
-    else if (card.dataset.action === 'add-for') openAddCredentialFor(card.dataset.svc);
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
+    const svcId = el.dataset.svc;
+    if (action === 'quick-copy-pw') {
+      e.stopPropagation();
+      const cred = vault.credentials[svcId];
+      if (cred) {
+        copyToClipboard(cred.password, el);
+        auditLog('copy_password', svcId, null, 'success');
+      }
+      return;
+    }
+    if (action === 'detail') openDetail(svcId);
+    else if (action === 'add-for') openAddCredentialFor(svcId);
   };
 }
 
@@ -359,6 +404,7 @@ window.setCategory = setCategory;
 window.filterServicePicker = filterServicePicker;
 window.fillGenPw = fillGenPw;
 window.toggleVis = toggleVis;
+window.openAddCredential = openAddCredential;
 
 export {
   getAllServices, getServiceById, getServiceByIdAsync,

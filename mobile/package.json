@@ -1,0 +1,21 @@
+{
+  "name": "passvault-app",
+  "version": "3.1.0",
+  "description": "PassVault - Secure Password Manager",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/preferences": "^8.0.1",
+    "capacitor-secure-storage-plugin": "^0.10.0",
+    "crypto-js": "^4.2.0"
+  }
+}

@@ -1,0 +1,2926 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>PassVault</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self';">
+<!-- CryptoJS loaded dynamically only for migration from v1 format -->
+<style>
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: #1e293b;
+  --bg-input: #1e293b;
+  --bg-hover: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-light: rgba(34,197,94,0.15);
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-light: rgba(239,68,68,0.15);
+  --warning: #f59e0b;
+  --border: #334155;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --tab-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e2e8f0;
+  --bg-card: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-light: rgba(22,163,74,0.1);
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-light: rgba(220,38,38,0.1);
+  --border: #e2e8f0;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-container {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.screen.active { display: flex; }
+
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--tab-height) + var(--safe-bottom) + 16px);
+}
+
+.scroll-content::-webkit-scrollbar { width: 4px; }
+.scroll-content::-webkit-scrollbar-track { background: transparent; }
+.scroll-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* Header */
+.header {
+  padding: calc(var(--safe-top) + 12px) 20px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+}
+
+.header-btn:hover { background: var(--accent-light); }
+
+/* Setup / Unlock screens */
+.auth-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-primary);
+}
+
+.auth-screen.active { display: flex; }
+
+.auth-logo {
+  font-size: 64px;
+  margin-bottom: 8px;
+}
+
+.auth-title {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, var(--accent), #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+
+.auth-form {
+  width: 100%;
+  max-width: 360px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 14px 48px 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-wrapper input:focus { border-color: var(--accent); }
+
+.input-wrapper .toggle-vis {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.strength-meter {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.strength-meter-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s, background 0.3s;
+  width: 0%;
+}
+
+.strength-text {
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover { background: var(--danger-hover); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1.5px solid var(--border);
+}
+
+.btn-outline:hover { background: var(--bg-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  padding: 8px 16px;
+}
+
+.btn-ghost:hover { background: var(--accent-light); }
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+}
+
+.match-hint {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.match-hint.ok { color: var(--accent); }
+.match-hint.err { color: var(--danger); }
+
+/* Shake animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+
+.shake { animation: shake 0.5s ease-in-out; }
+
+.auth-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin-top: 8px;
+  display: none;
+  text-align: center;
+}
+
+/* Stats */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+
+.stat-card .stat-num {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.stat-card .stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Search */
+.search-bar {
+  padding: 0 20px 8px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px 12px 40px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  position: relative;
+}
+
+.search-input:focus { border-color: var(--accent); }
+
+.search-wrap {
+  position: relative;
+}
+
+.search-wrap::before {
+  content: '🔍';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  z-index: 1;
+}
+
+/* Category chips */
+.chips-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 20px 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.chips-row::-webkit-scrollbar { display: none; }
+
+.chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Service cards */
+.cards-list {
+  padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.svc-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.svc-card:hover { border-color: var(--accent); background: var(--bg-hover); }
+
+.svc-icon {
+  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.svc-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.svc-name {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.svc-name .cat-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.svc-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.svc-action-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--accent-light);
+  color: var(--accent);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* FAB */
+.fab {
+  position: fixed;
+  bottom: calc(var(--tab-height) + var(--safe-bottom) + 16px);
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 28px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(34,197,94,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  transition: transform 0.2s;
+}
+
+.fab:hover { transform: scale(1.1); }
+
+/* Tab bar */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--tab-height) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 30;
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 8px 0;
+}
+
+.tab-item .tab-icon { font-size: 22px; }
+
+.tab-item.active { color: var(--accent); }
+
+/* Detail screen */
+.detail-header {
+  padding: calc(var(--safe-top) + 12px) 20px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-back {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-svc-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.detail-svc-icon {
+  font-size: 40px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+}
+
+.detail-svc-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.detail-svc-cat {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.detail-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  padding-bottom: calc(var(--safe-bottom) + 32px);
+}
+
+.cred-field {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.cred-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.cred-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cred-value {
+  flex: 1;
+  font-size: 15px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  word-break: break-all;
+}
+
+.cred-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.cred-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.cred-btn.copied { color: var(--accent); }
+
+.instructions-list {
+  list-style: none;
+  padding: 0;
+}
+
+.instructions-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 10px;
+}
+
+.instructions-list li:last-child { border-bottom: none; }
+
+.instructions-list li .step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.twofa-warning {
+  background: var(--danger-light);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Wizard */
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+.wizard-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+  transition: all 0.3s;
+}
+
+.wizard-dot.active { background: var(--accent); width: 28px; }
+
+.wizard-dot.done { background: var(--accent); }
+
+.wizard-step-content {
+  padding: 0 20px 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.wizard-step-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.wizard-step-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.wizard-actions {
+  padding: 16px 20px;
+  display: flex;
+  gap: 12px;
+}
+
+/* Generator */
+.gen-display {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin: 20px;
+  text-align: center;
+}
+
+.gen-password {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  word-break: break-all;
+  line-height: 1.4;
+  min-height: 28px;
+  color: var(--accent);
+}
+
+.gen-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.gen-section {
+  padding: 0 20px 16px;
+}
+
+.gen-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+}
+
+.slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.slider-val {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: center;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.toggle-row:last-child { border-bottom: none; }
+
+.toggle-label {
+  font-size: 15px;
+}
+
+.toggle-switch {
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--border);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  padding: 0;
+}
+
+.toggle-switch.on { background: var(--accent); }
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: #fff;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s;
+}
+
+.toggle-switch.on::after { transform: translateX(20px); }
+
+/* Settings */
+.settings-group {
+  padding: 0 20px;
+  margin-bottom: 20px;
+}
+
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.settings-item:hover { background: var(--bg-hover); }
+
+.settings-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-item-icon {
+  font-size: 22px;
+  width: 36px;
+  text-align: center;
+}
+
+.settings-item-text h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-item-text p {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-item-right {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Modal / Overlay screens */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 50;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal-sheet {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-header {
+  padding: 20px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-body::-webkit-scrollbar { width: 4px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* Service picker list */
+.svc-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.svc-picker-item:hover { background: var(--bg-hover); }
+
+.svc-picker-icon {
+  font-size: 24px;
+  width: 36px;
+  text-align: center;
+}
+
+.svc-picker-name {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.svc-picker-cat {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: calc(var(--tab-height) + var(--safe-bottom) + 24px);
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  z-index: 100;
+  opacity: 0;
+  transition: all 0.3s;
+  pointer-events: none;
+  border: 1px solid var(--border);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Confirm dialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.confirm-overlay.active { display: flex; }
+
+.confirm-box {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+
+.confirm-box h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.confirm-box p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.confirm-actions .btn { flex: 1; }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Transition helpers */
+.fade-in { animation: fadeIn 0.25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* About */
+.about-content {
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.about-logo { font-size: 56px; margin-bottom: 8px; }
+
+.about-title {
+  font-size: 24px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.about-version {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.about-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+textarea.form-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+textarea.form-textarea:focus { border-color: var(--accent); }
+
+select.form-select {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+select.form-select:focus { border-color: var(--accent); }
+
+.copy-field {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-field .copy-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.copy-field .copy-value {
+  flex: 1;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.copy-field .copy-btn {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<div class="app-container" id="app">
+
+  <!-- SETUP SCREEN -->
+  <div class="auth-screen active" id="screen-setup">
+    <div class="auth-logo">🛡️</div>
+    <div class="auth-title">PassVault</div>
+    <div class="auth-subtitle">Создайте мастер-пароль для защиты хранилища</div>
+    <div class="auth-form">
+      <div class="form-group">
+        <label>Мастер-пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="setup-pw1" placeholder="Минимум 8 символов" autocomplete="off">
+          <button class="toggle-vis" onclick="toggleVis('setup-pw1')">👁️</button>
+        </div>
+        <div class="strength-meter"><div class="strength-meter-fill" id="setup-strength-fill"></div></div>
+        <div class="strength-text" id="setup-strength-text"></div>
+      </div>
+      <div class="form-group">
+        <label>Подтвердите пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="setup-pw2" placeholder="Повторите пароль" autocomplete="off">
+          <button class="toggle-vis" onclick="toggleVis('setup-pw2')">👁️</button>
+        </div>
+        <div class="match-hint" id="setup-match"></div>
+      </div>
+      <button class="btn btn-primary" id="setup-btn" disabled onclick="doSetup()">Создать хранилище</button>
+    </div>
+  </div>
+
+  <!-- UNLOCK SCREEN -->
+  <div class="auth-screen" id="screen-unlock">
+    <div class="auth-logo">🔐</div>
+    <div class="auth-title">PassVault</div>
+    <div class="auth-subtitle">Введите мастер-пароль для входа</div>
+    <div class="auth-form">
+      <div class="form-group">
+        <label>Мастер-пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="unlock-pw" placeholder="Введите пароль" autocomplete="off" onkeydown="if(event.key==='Enter')doUnlock()">
+          <button class="toggle-vis" onclick="toggleVis('unlock-pw')">👁️</button>
+        </div>
+        <div class="auth-error" id="unlock-error">❌ Неверный пароль</div>
+      </div>
+      <button class="btn btn-primary" onclick="doUnlock()">Разблокировать</button>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div class="screen" id="screen-main">
+    <div class="header">
+      <div class="header-top">
+        <h1>🛡️ PassVault</h1>
+      </div>
+    </div>
+    <div class="scroll-content" id="dashboard-scroll">
+      <div class="stats-row" id="stats-row"></div>
+      <div class="search-bar">
+        <div class="search-wrap">
+          <input class="search-input" id="search-input" placeholder="Поиск сервисов..." oninput="renderDashboard()">
+        </div>
+      </div>
+      <div class="chips-row" id="chips-row"></div>
+      <div class="cards-list" id="cards-list"></div>
+    </div>
+    <button class="fab" onclick="openAddCredential()" title="Добавить">＋</button>
+    <div class="tab-bar">
+      <button class="tab-item active" onclick="switchTab('vault')"><span class="tab-icon">🛡️</span>Хранилище</button>
+      <button class="tab-item" onclick="switchTab('generator')"><span class="tab-icon">✨</span>Генератор</button>
+      <button class="tab-item" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span>Настройки</button>
+    </div>
+  </div>
+
+  <!-- GENERATOR TAB -->
+  <div class="screen" id="screen-generator">
+    <div class="header">
+      <div class="header-top"><h1>✨ Генератор</h1></div>
+    </div>
+    <div class="scroll-content">
+      <div class="gen-display">
+        <div class="gen-password" id="gen-output">—</div>
+        <div class="strength-meter" style="margin:12px 0 0"><div class="strength-meter-fill" id="gen-strength-fill"></div></div>
+        <div class="strength-text" id="gen-strength-text" style="text-align:center"></div>
+        <div class="gen-actions">
+          <button class="btn btn-primary btn-sm" onclick="generatePassword()">🎲 Сгенерировать</button>
+          <button class="btn btn-outline btn-sm" onclick="copyGenPassword()">📋 Копировать</button>
+        </div>
+      </div>
+      <div class="gen-section">
+        <div class="gen-section-title">Параметры</div>
+        <div class="slider-row">
+          <span>Длина</span>
+          <input type="range" id="gen-length" min="8" max="64" value="16" oninput="updateGenLength()">
+          <span class="slider-val" id="gen-length-val">16</span>
+        </div>
+        <div class="toggle-row"><span class="toggle-label">A-Z (заглавные)</span><button class="toggle-switch on" id="gen-upper" onclick="toggleGen('gen-upper')"></button></div>
+        <div class="toggle-row"><span class="toggle-label">a-z (строчные)</span><button class="toggle-switch on" id="gen-lower" onclick="toggleGen('gen-lower')"></button></div>
+        <div class="toggle-row"><span class="toggle-label">0-9 (цифры)</span><button class="toggle-switch on" id="gen-digits" onclick="toggleGen('gen-digits')"></button></div>
+        <div class="toggle-row"><span class="toggle-label">!@#$% (символы)</span><button class="toggle-switch on" id="gen-symbols" onclick="toggleGen('gen-symbols')"></button></div>
+        <div class="toggle-row"><span class="toggle-label">Исключить неоднозначные</span><button class="toggle-switch" id="gen-noAmbiguous" onclick="toggleGen('gen-noAmbiguous')"></button></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-item" onclick="switchTab('vault')"><span class="tab-icon">🛡️</span>Хранилище</button>
+      <button class="tab-item active" onclick="switchTab('generator')"><span class="tab-icon">✨</span>Генератор</button>
+      <button class="tab-item" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span>Настройки</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div class="screen" id="screen-settings">
+    <div class="header">
+      <div class="header-top"><h1>⚙️ Настройки</h1></div>
+    </div>
+    <div class="scroll-content">
+      <div class="settings-group">
+        <div class="settings-group-title">Внешний вид</div>
+        <div class="settings-item" onclick="toggleTheme()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">🌙</div>
+            <div class="settings-item-text"><h3>Тёмная тема</h3><p id="theme-status">Включена</p></div>
+          </div>
+          <div class="settings-item-right"><button class="toggle-switch on" id="theme-toggle"></button></div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">Безопасность</div>
+        <div class="settings-item" onclick="showAuditLog()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">📋</div>
+            <div class="settings-item-text"><h3>Журнал активности</h3><p>Последние действия</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+        <div class="settings-item" onclick="showSecurityInfo()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">🛡️</div>
+            <div class="settings-item-text"><h3>Информация о безопасности</h3><p>Шифрование и защита</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">Управление</div>
+        <div class="settings-item" onclick="openAddCustomService()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">➕</div>
+            <div class="settings-item-text"><h3>Добавить сервис</h3><p>Создать свой сервис</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+        <div class="settings-item" onclick="lockVault()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">🔒</div>
+            <div class="settings-item-text"><h3>Заблокировать</h3><p>Закрыть хранилище</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-group-title">О приложении</div>
+        <div class="settings-item" onclick="showAbout()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">ℹ️</div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 3.0.0</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-item" onclick="switchTab('vault')"><span class="tab-icon">🛡️</span>Хранилище</button>
+      <button class="tab-item" onclick="switchTab('generator')"><span class="tab-icon">✨</span>Генератор</button>
+      <button class="tab-item active" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span>Настройки</button>
+    </div>
+  </div>
+
+  <!-- SERVICE DETAIL -->
+  <div class="screen" id="screen-detail">
+    <div class="detail-header">
+      <button class="detail-back" onclick="closeDetail()">← Назад</button>
+      <div class="detail-svc-row">
+        <div class="detail-svc-icon" id="detail-icon"></div>
+        <div>
+          <div class="detail-svc-name" id="detail-name"></div>
+          <div class="detail-svc-cat" id="detail-cat"></div>
+        </div>
+      </div>
+    </div>
+    <div class="detail-content" id="detail-content"></div>
+  </div>
+
+  <!-- CHANGE PASSWORD WIZARD -->
+  <div class="screen" id="screen-wizard">
+    <div class="header">
+      <div class="header-top">
+        <button class="header-btn" onclick="closeWizard()">← Назад</button>
+        <h1 style="font-size:16px">Смена пароля</h1>
+        <div style="width:60px"></div>
+      </div>
+    </div>
+    <div class="wizard-steps">
+      <div class="wizard-dot active" id="wdot-0"></div>
+      <div class="wizard-dot" id="wdot-1"></div>
+      <div class="wizard-dot" id="wdot-2"></div>
+    </div>
+    <div class="wizard-step-content" id="wizard-content"></div>
+    <div class="wizard-actions" id="wizard-actions"></div>
+  </div>
+</div>
+
+<!-- ADD CREDENTIAL MODAL -->
+<div class="modal-overlay" id="modal-add-cred">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Добавить учётные данные</h2>
+      <button class="modal-close" onclick="closeModal('modal-add-cred')">✕</button>
+    </div>
+    <div class="modal-body" id="add-cred-body"></div>
+  </div>
+</div>
+
+<!-- ADD CUSTOM SERVICE MODAL -->
+<div class="modal-overlay" id="modal-custom-svc">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Добавить сервис</h2>
+      <button class="modal-close" onclick="closeModal('modal-custom-svc')">✕</button>
+    </div>
+    <div class="modal-body" id="custom-svc-body"></div>
+  </div>
+</div>
+
+<!-- ABOUT MODAL -->
+<div class="modal-overlay" id="modal-about">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>О приложении</h2>
+      <button class="modal-close" onclick="closeModal('modal-about')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="about-content">
+        <div class="about-logo">🛡️</div>
+        <div class="about-title">PassVault</div>
+        <div class="about-version">Версия 3.0.0</div>
+        <div class="about-desc">
+          PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIT LOG MODAL -->
+<div class="modal-overlay" id="modal-audit">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Журнал активности</h2>
+      <button class="modal-close" onclick="closeModal('modal-audit')">✕</button>
+    </div>
+    <div class="modal-body" id="audit-log-body"></div>
+  </div>
+</div>
+
+<!-- SECURITY INFO MODAL -->
+<div class="modal-overlay" id="modal-security">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Безопасность</h2>
+      <button class="modal-close" onclick="closeModal('modal-security')">✕</button>
+    </div>
+    <div class="modal-body" id="security-info-body"></div>
+  </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-text"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline" onclick="closeConfirm()">Отмена</button>
+      <button class="btn btn-danger" id="confirm-ok" onclick="confirmAction()">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== SECURE STORAGE LAYER (Capacitor SecureStorage for mobile) =====
+const IS_CAPACITOR = !!(window.Capacitor && Capacitor.Plugins);
+const SecureStore = IS_CAPACITOR ? Capacitor.Plugins.SecureStoragePlugin || null : null;
+
+// Abstract storage layer: uses SecureStorage (Android Keystore) on mobile, localStorage on web
+const SecureStorage = {
+  async getItem(key) {
+    try {
+      if (IS_CAPACITOR && SecureStore) {
+        const result = await SecureStore.get({ key });
+        return result.value || null;
+      }
+    } catch(e) {}
+    return localStorage.getItem(key);
+  },
+  async setItem(key, value) {
+    try {
+      if (IS_CAPACITOR && SecureStore) {
+        await SecureStore.set({ key, value });
+        return;
+      }
+    } catch(e) {}
+    localStorage.setItem(key, value);
+  },
+  async removeItem(key) {
+    try {
+      if (IS_CAPACITOR && SecureStore) {
+        await SecureStore.delete({ key });
+        return;
+      }
+    } catch(e) {}
+    localStorage.removeItem(key);
+  }
+};
+
+// Override localStorage for sensitive vault data on mobile
+const _origLocalStorageSet = localStorage.setItem.bind(localStorage);
+const _origLocalStorageGet = localStorage.getItem.bind(localStorage);
+const _origLocalStorageRemove = localStorage.removeItem.bind(localStorage);
+
+const SENSITIVE_KEYS = ['pv_salt', 'pv_hash', 'pv_vault', 'pv_custom_services', 'pv_audit', 'pv_format', 'pv_failed_attempts', 'pv_lockout_until'];
+
+localStorage.setItem = function(key, value) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+    SecureStore.setItem(key, value).catch(() => _origLocalStorageSet(key, value));
+  } else {
+    _origLocalStorageSet(key, value);
+  }
+};
+
+localStorage.getItem = function(key) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+    // Synchronous fallback for localStorage API - data is pre-loaded at startup
+    return _origLocalStorageGet(key);
+  }
+  return _origLocalStorageGet(key);
+};
+
+localStorage.removeItem = function(key) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+    SecureStore.removeItem(key).catch(() => _origLocalStorageRemove(key));
+  }
+  _origLocalStorageRemove(key);
+};
+
+// Pre-load sensitive data from SecureStorage into memory at startup
+async function preLoadSecureData() {
+  if (!IS_CAPACITOR || !SecureStore) return;
+  for (const key of SENSITIVE_KEYS) {
+    try {
+      const value = await SecureStore.getItem(key);
+      if (value !== null) {
+        _origLocalStorageSet(key, value);
+      }
+    } catch(e) {}
+  }
+}
+
+// Sync data back to SecureStorage (called before app close)
+async function syncToSecureStorage() {
+  if (!IS_CAPACITOR || !SecureStore) return;
+  for (const key of SENSITIVE_KEYS) {
+    try {
+      const value = _origLocalStorageGet(key);
+      if (value !== null) {
+        await SecureStore.setItem(key, value);
+      } else {
+        await SecureStore.removeItem(key);
+      }
+    } catch(e) {}
+  }
+}
+
+// Pre-load secure data on startup
+preLoadSecureData();
+
+// Sync to secure storage before page unload
+window.addEventListener('beforeunload', syncToSecureStorage);
+document.addEventListener('pause', syncToSecureStorage); // Capacitor pause event
+
+// ===== SERVICES REGISTRY =====
+const SERVICES = [
+  { id:'gmail', name:'Google/Gmail', displayName:'Google/Gmail', category:'email', iconEmoji:'📧', passwordChangeUrl:'https://myaccount.google.com/signinoptions/password', loginUrl:'https://accounts.google.com/', usernameSelector:'#identifierId', currentPasswordSelector:'[name=password]', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите на страницу управления аккаунтом Google','Выберите «Безопасность» → «Пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Сменить пароль»'], twoFactorNote:'Google может запросить код двухфакторной аутентификации' },
+  { id:'yandex', name:'Yandex', displayName:'Yandex', category:'email', iconEmoji:'📬', passwordChangeUrl:'https://passport.yandex.ru/profile', loginUrl:'https://passport.yandex.ru/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в Яндекс Паспорт','Нажмите «Изменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните изменения'], twoFactorNote:'Яндекс может отправить код на привязанный номер' },
+  { id:'mailru', name:'Mail.ru', displayName:'Mail.ru', category:'email', iconEmoji:'📮', passwordChangeUrl:'https://e.mail.ru/settings/security', loginUrl:'https://mail.ru/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки безопасности Mail.ru','Выберите «Сменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните изменения'], twoFactorNote:null },
+  { id:'protonmail', name:'ProtonMail', displayName:'ProtonMail', category:'email', iconEmoji:'🔒', passwordChangeUrl:'https://account.proton.me/u/0/mail/password', loginUrl:'https://account.proton.me/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Войдите в аккаунт ProtonMail','Перейдите в Настройки → Пароль','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Сохранить»'], twoFactorNote:'ProtonMail поддерживает 2FA через TOTP' },
+  { id:'vk', name:'VK', displayName:'VK', category:'social', iconEmoji:'💬', passwordChangeUrl:'https://vk.com/settings', loginUrl:'https://vk.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки VK','Выберите «Безопасность» → «Сменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните изменения'], twoFactorNote:null },
+  { id:'telegram', name:'Telegram', displayName:'Telegram', category:'social', iconEmoji:'✈️', passwordChangeUrl:'https://t.me/', loginUrl:'https://t.me/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Откройте Telegram','Перейдите в Настройки → Конфиденциальность','Нажмите «Двухэтапная аутентификация»','Установите или смените пароль','Подтвердите новый пароль'], twoFactorNote:'Telegram использует двухэтапную аутентификацию вместо обычной смены пароля' },
+  { id:'instagram', name:'Instagram', displayName:'Instagram', category:'social', iconEmoji:'📸', passwordChangeUrl:'https://www.instagram.com/accounts/password/change/', loginUrl:'https://www.instagram.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки профиля Instagram','Выберите «Безопасность» → «Пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Сохранить»'], twoFactorNote:null },
+  { id:'twitter', name:'X/Twitter', displayName:'X/Twitter', category:'social', iconEmoji:'🐦', passwordChangeUrl:'https://twitter.com/settings/password', loginUrl:'https://twitter.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки X','Выберите «Ваш аккаунт» → «Изменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните изменения'], twoFactorNote:null },
+  { id:'facebook', name:'Facebook', displayName:'Facebook', category:'social', iconEmoji:'👤', passwordChangeUrl:'https://www.facebook.com/settings?tab=account&section=password', loginUrl:'https://www.facebook.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки Facebook','Выберите «Безопасность и вход»','Нажмите «Изменить» рядом с паролем','Введите текущий и новый пароль','Сохраните изменения'], twoFactorNote:null },
+  { id:'linkedin', name:'LinkedIn', displayName:'LinkedIn', category:'social', iconEmoji:'💼', passwordChangeUrl:'https://www.linkedin.com/psettings/change-password', loginUrl:'https://www.linkedin.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки LinkedIn','Выберите «Вход и безопасность»','Нажмите «Изменить пароль»','Введите текущий и новый пароль','Сохраните'], twoFactorNote:null },
+  { id:'github', name:'GitHub', displayName:'GitHub', category:'dev', iconEmoji:'🐙', passwordChangeUrl:'https://github.com/settings/password', loginUrl:'https://github.com/login', usernameSelector:'#login_field', currentPasswordSelector:'#old_password', newPasswordSelector:'#user_password', confirmPasswordSelector:'#user_password_confirmation', submitSelector:'button[type=submit]', instructions:['Перейдите в настройки GitHub','Выберите «Password» в боковом меню','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Update password»'], twoFactorNote:'GitHub может запросить код 2FA' },
+  { id:'gitlab', name:'GitLab', displayName:'GitLab', category:'dev', iconEmoji:'🦊', passwordChangeUrl:'https://gitlab.com/-/user_settings/password', loginUrl:'https://gitlab.com/users/sign_in', usernameSelector:'#user_login', currentPasswordSelector:'#user_current_password', newPasswordSelector:'#user_password', confirmPasswordSelector:'#user_password_confirmation', submitSelector:'.btn-update', instructions:['Перейдите в настройки GitLab','Выберите «Password»','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Save password»'], twoFactorNote:null },
+  { id:'bitbucket', name:'Bitbucket', displayName:'Bitbucket', category:'dev', iconEmoji:'🪣', passwordChangeUrl:'https://bitbucket.org/account/settings/password/', loginUrl:'https://bitbucket.org/account/signin/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки Bitbucket','Выберите «Password»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните изменения'], twoFactorNote:null },
+  { id:'npm', name:'npm', displayName:'npm', category:'dev', iconEmoji:'📦', passwordChangeUrl:'https://www.npmjs.com/settings/~/tokens', loginUrl:'https://www.npmjs.com/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите на npmjs.com','Войдите в аккаунт','Перейдите в настройки аккаунта','Измените пароль','Подтвердите через email'], twoFactorNote:'npm поддерживает 2FA через TOTP' },
+  { id:'docker', name:'Docker', displayName:'Docker', category:'dev', iconEmoji:'🐳', passwordChangeUrl:'https://hub.docker.com/settings/security', loginUrl:'https://hub.docker.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки Docker Hub','Выберите «Security»','Нажмите «Change password»','Введите текущий и новый пароль','Сохраните'], twoFactorNote:null },
+  { id:'dropbox', name:'Dropbox', displayName:'Dropbox', category:'cloud', iconEmoji:'📁', passwordChangeUrl:'https://www.dropbox.com/account/security', loginUrl:'https://www.dropbox.com/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки безопасности Dropbox','Нажмите «Изменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните'], twoFactorNote:null },
+  { id:'onedrive', name:'OneDrive', displayName:'OneDrive', category:'cloud', iconEmoji:'☁️', passwordChangeUrl:'https://account.microsoft.com/security', loginUrl:'https://login.live.com/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки безопасности Microsoft','Выберите «Изменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните'], twoFactorNote:'Microsoft может запросить код верификации' },
+  { id:'discord', name:'Discord', displayName:'Discord', category:'messaging', iconEmoji:'🎮', passwordChangeUrl:'https://discord.com/settings/account', loginUrl:'https://discord.com/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Откройте настройки Discord','Перейдите в «Мой аккаунт»','Нажмите «Изменить пароль»','Введите текущий и новый пароль','Готово!'], twoFactorNote:null },
+  { id:'slack', name:'Slack', displayName:'Slack', category:'messaging', iconEmoji:'📱', passwordChangeUrl:'https://slack.com/account/settings', loginUrl:'https://slack.com/signin', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки аккаунта Slack','Нажмите «Expand» рядом с паролем','Введите текущий и новый пароль','Нажмите «Save»'], twoFactorNote:null },
+  { id:'paypal', name:'PayPal', displayName:'PayPal', category:'finance', iconEmoji:'💰', passwordChangeUrl:'https://www.paypal.com/myaccount/security/password', loginUrl:'https://www.paypal.com/signin', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки безопасности PayPal','Выберите «Сменить пароль»','Введите текущий пароль','Введите и подтвердите новый пароль','Сохраните'], twoFactorNote:'PayPal может запросить подтверждение через SMS или email' },
+  { id:'netflix', name:'Netflix', displayName:'Netflix', category:'streaming', iconEmoji:'🎬', passwordChangeUrl:'https://www.netflix.com/password', loginUrl:'https://www.netflix.com/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите на страницу смены пароля Netflix','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Сохранить»'], twoFactorNote:null },
+  { id:'spotify', name:'Spotify', displayName:'Spotify', category:'streaming', iconEmoji:'🎵', passwordChangeUrl:'https://www.spotify.com/account/change-password/', loginUrl:'https://accounts.spotify.com/login', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите на страницу смены пароля Spotify','Введите текущий пароль','Введите и подтвердите новый пароль','Нажмите «Set new password»'], twoFactorNote:null },
+  { id:'steam', name:'Steam', displayName:'Steam', category:'gaming', iconEmoji:'🕹️', passwordChangeUrl:'https://store.steampowered.com/account/', loginUrl:'https://store.steampowered.com/login/', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки аккаунта Steam','Нажмите «Изменить пароль»','Подтвердите через email','Введите новый пароль','Готово!'], twoFactorNote:'Steam Guard может запросить код подтверждения' },
+  { id:'amazon', name:'Amazon', displayName:'Amazon', category:'ecommerce', iconEmoji:'📦', passwordChangeUrl:'https://www.amazon.com/a/css/payment', loginUrl:'https://www.amazon.com/ap/signin', usernameSelector:'', currentPasswordSelector:'', newPasswordSelector:'', confirmPasswordSelector:'', submitSelector:'', instructions:['Перейдите в настройки аккаунта Amazon','Выберите «Login & Security»','Нажмите «Edit» рядом с паролем','Введите текущий и новый пароль','Сохраните изменения'], twoFactorNote:'Amazon может запросить OTP' }
+];
+
+const CATEGORIES = {
+  email: { name:'Почта', color:'#3B82F6' },
+  social: { name:'Соцсети', color:'#EC4899' },
+  dev: { name:'Разработка', color:'#8B5CF6' },
+  cloud: { name:'Облако', color:'#06B6D4' },
+  messaging: { name:'Мессенджеры', color:'#22C55E' },
+  finance: { name:'Финансы', color:'#F59E0B' },
+  streaming: { name:'Стриминг', color:'#EF4444' },
+  gaming: { name:'Игры', color:'#6366F1' },
+  ecommerce: { name:'Покупки', color:'#F97316' },
+  custom: { name:'Другие', color:'#64748B' }
+};
+
+const CHARS = {
+  upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  lower: 'abcdefghijklmnopqrstuvwxyz',
+  digits: '0123456789',
+  symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?',
+  ambiguous: 'Il1O0o'
+};
+
+// ===== STATE =====
+let masterKey = null; // CryptoKey object (non-extractable)
+let masterHash = null;
+let currentTab = 'vault';
+let currentCategory = 'all';
+let currentDetailServiceId = null;
+let wizardServiceId = null;
+let wizardStep = 0;
+let wizardNewPassword = '';
+let confirmCallback = null;
+const credMap = new Map(); // Safe credential storage (not in DOM)
+let autoLockTimer = null;
+const AUTO_LOCK_MS = 5 * 60 * 1000; // 5 minutes inactivity auto-lock
+const MASTER_KEY_TTL_MS = 30 * 60 * 1000; // 30 minutes max master key lifetime in memory
+let failedAttempts = parseInt(localStorage.getItem('pv_failed_attempts') || '0', 10);
+let lockoutUntil = parseInt(localStorage.getItem('pv_lockout_until') || '0', 10);
+let masterKeyCreatedAt = 0; // timestamp when masterKey was derived
+let masterKeyTtlTimer = null; // timer for absolute 30-min master key TTL
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes lockout after 5 failed attempts
+const LOCKOUT_DELAYS = [0, 1000, 2000, 5000, 15000, 60000]; // Progressive delays per failed attempt
+
+// ===== WEB CRYPTO API (AES-256-GCM) =====
+const PBKDF2_ITERATIONS = 600000;
+const SALT_LENGTH = 16; // bytes
+const IV_LENGTH = 12; // bytes for GCM
+const KEY_LENGTH = 256; // bits
+
+function hexToBuffer(hex) {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  return bytes.buffer;
+}
+
+function bufferToHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function bufferToBase64(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// Derive key and hash from password
+async function deriveKeyAndHash(password, saltHex) {
+  const salt = saltHex ? new Uint8Array(hexToBuffer(saltHex)) : crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  // Derive 512 bits: 32 bytes for AES key + 32 bytes for verification hash
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    keyMaterial,
+    512
+  );
+  const keyBits = bits.slice(0, 32);
+  const hashBits = bits.slice(32, 64);
+
+  // Import as non-extractable AES-GCM key
+  const aesKey = await crypto.subtle.importKey(
+    'raw', keyBits, { name: 'AES-GCM', length: KEY_LENGTH }, false, ['encrypt', 'decrypt']
+  );
+
+  // Securely zero out raw key material from memory
+  new Uint8Array(bits).fill(0);
+  new Uint8Array(keyBits).fill(0);
+
+  return {
+    key: aesKey, // CryptoKey object, non-extractable!
+    hash: bufferToHex(hashBits),
+    salt: bufferToHex(salt)
+  };
+}
+
+// Encrypt with AES-256-GCM (authenticated encryption - no separate HMAC needed)
+async function encrypt(data, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const enc = new TextEncoder();
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    enc.encode(data)
+  );
+  // Format: base64(iv):base64(ciphertext)
+  return bufferToBase64(iv) + ':' + bufferToBase64(encrypted);
+}
+
+// Decrypt with AES-256-GCM
+async function decryptData(encData, key) {
+  try {
+    const parts = encData.split(':');
+    if (parts.length !== 2) return null;
+    const iv = base64ToBuffer(parts[0]);
+    const ct = base64ToBuffer(parts[1]);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      ct
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch(e) {
+    return null; // Decryption failed (tampered or wrong key) - GCM verifies automatically
+  }
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+}
+
+// ===== AUDIT LOGGING (encrypted) =====
+const MAX_AUDIT_ENTRIES = 200;
+
+async function auditLog(action, serviceId, details, result) {
+  try {
+    const entry = {
+      ts: Date.now(),
+      action: action,
+      svc: serviceId || null,
+      detail: details || null,
+      result: result || null, // 'success' | 'failure' | null
+      ua: navigator.userAgent.substring(0, 80) || null, // truncated user agent
+      platform: navigator.platform || null
+    };
+    if (masterKey) {
+      // Encrypt audit log with the vault key
+      const raw = localStorage.getItem('pv_audit');
+      let logs = [];
+      if (raw) {
+        const dec = await decryptData(raw, masterKey);
+        if (dec) { try { logs = JSON.parse(dec); } catch(e) { logs = []; } }
+      }
+      logs.push(entry);
+      while (logs.length > MAX_AUDIT_ENTRIES) logs.shift();
+      const enc = await encrypt(JSON.stringify(logs), masterKey);
+      localStorage.setItem('pv_audit', enc);
+    } else {
+      // Fallback: store unencrypted when vault is locked (e.g. failed unlock attempts)
+      const logs = JSON.parse(localStorage.getItem('pv_audit_plain') || '[]');
+      logs.push(entry);
+      while (logs.length > MAX_AUDIT_ENTRIES) logs.shift();
+      localStorage.setItem('pv_audit_plain', JSON.stringify(logs));
+    }
+  } catch(e) {}
+}
+
+async function getAllAuditLogs() {
+  let encLogs = [];
+  let plainLogs = [];
+  if (masterKey) {
+    const raw = localStorage.getItem('pv_audit');
+    if (raw) {
+      const dec = await decryptData(raw, masterKey);
+      if (dec) { try { encLogs = JSON.parse(dec); } catch(e) {} }
+    }
+  }
+  try { plainLogs = JSON.parse(localStorage.getItem('pv_audit_plain') || '[]'); } catch(e) {}
+  // Merge and sort by timestamp
+  const all = [...encLogs, ...plainLogs].sort((a, b) => b.ts - a.ts);
+  // Migrate plain logs to encrypted if we have a key
+  if (masterKey && plainLogs.length > 0) {
+    const merged = [...encLogs, ...plainLogs].sort((a, b) => a.ts - b.ts);
+    while (merged.length > MAX_AUDIT_ENTRIES) merged.shift();
+    const enc = await encrypt(JSON.stringify(merged), masterKey);
+    localStorage.setItem('pv_audit', enc);
+    localStorage.removeItem('pv_audit_plain');
+  }
+  return all;
+}
+
+// Migrate from old CryptoJS format to new Web Crypto API format
+async function migrateVaultIfNeeded(aesKey, migratePw) {
+  const vaultData = localStorage.getItem('pv_vault');
+  if (!vaultData) return;
+
+  // Check if it's new format (base64:base64, 2 parts)
+  const parts = vaultData.split(':');
+  if (parts.length === 2) return; // Already new format
+
+  // Old format: has 3 parts (hmac:iv:ciphertext) - try to migrate
+  try {
+    if (typeof CryptoJS !== 'undefined') {
+      const salt = localStorage.getItem('pv_salt');
+      const pw = migratePw;
+      if (!pw) return;
+
+      const oldKey = CryptoJS.PBKDF2(pw, salt, { keySize: 256/32, iterations: 600000, hasher: CryptoJS.algo.SHA256 });
+      const oldKeyHex = oldKey.toString();
+
+      let decrypted = null;
+      if (parts.length >= 3) {
+        const [storedHmac, ivHex, ct] = parts;
+        const ciphertext = ivHex + ':' + ct;
+        const hmacKey = CryptoJS.HmacSHA256('hmac-key-derivation', CryptoJS.enc.Hex.parse(oldKeyHex)).toString();
+        const computedHmac = CryptoJS.HmacSHA256(ciphertext, CryptoJS.enc.Hex.parse(hmacKey)).toString();
+        if (constantTimeEqual(storedHmac, computedHmac)) {
+          const iv = CryptoJS.enc.Hex.parse(ivHex);
+          const dec = CryptoJS.AES.decrypt(ct, CryptoJS.enc.Hex.parse(oldKeyHex), { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+          decrypted = dec.toString(CryptoJS.enc.Utf8);
+        }
+      }
+
+      if (decrypted) {
+        const newEnc = await encrypt(decrypted, aesKey);
+        localStorage.setItem('pv_vault', newEnc);
+        localStorage.setItem('pv_format', 'v2');
+      }
+
+      // Also migrate custom services
+      const customRaw = localStorage.getItem('pv_custom_services');
+      if (customRaw) {
+        try {
+          let customDecrypted = null;
+          const customParts = customRaw.split(':');
+          if (customParts.length >= 3) {
+            const [storedHmac, ivHex, ct] = customParts;
+            const ciphertext = ivHex + ':' + ct;
+            const hmacKey = CryptoJS.HmacSHA256('hmac-key-derivation', CryptoJS.enc.Hex.parse(oldKeyHex)).toString();
+            const computedHmac = CryptoJS.HmacSHA256(ciphertext, CryptoJS.enc.Hex.parse(hmacKey)).toString();
+            if (constantTimeEqual(storedHmac, computedHmac)) {
+              const iv = CryptoJS.enc.Hex.parse(ivHex);
+              const dec = CryptoJS.AES.decrypt(ct, CryptoJS.enc.Hex.parse(oldKeyHex), { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+              customDecrypted = dec.toString(CryptoJS.enc.Utf8);
+            }
+          } else {
+            customDecrypted = customRaw;
+          }
+          if (customDecrypted) {
+            const newCustomEnc = await encrypt(customDecrypted, aesKey);
+            localStorage.setItem('pv_custom_services', newCustomEnc);
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    console.error('Migration failed:', e);
+  }
+}
+
+// ===== PASSWORD STRENGTH =====
+function evaluatePasswordStrength(pw) {
+  if (!pw) return { score: 0, label: '', color: '' };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^a-zA-Z0-9]/.test(pw)) score++;
+  if (pw.length >= 16) score++;
+  // Deductions
+  if (/^[a-z]+$/.test(pw) || /^[0-9]+$/.test(pw) || /^[A-Z]+$/) score = Math.max(score - 2, 0);
+  score = Math.min(score, 4);
+  const labels = ['', 'Слабый', 'Средний', 'Хороший', 'Отличный'];
+  const colors = ['', '#ef4444', '#f59e0b', '#22c55e', '#06b6d4'];
+  const widths = ['0%', '25%', '50%', '75%', '100%'];
+  return { score, label: labels[score], color: colors[score], width: widths[score] };
+}
+
+// ===== PASSWORD GENERATION =====
+function generatePasswordString(length, options) {
+  let charset = '';
+  if (options.upper) charset += CHARS.upper;
+  if (options.lower) charset += CHARS.lower;
+  if (options.digits) charset += CHARS.digits;
+  if (options.symbols) charset += CHARS.symbols;
+  if (!charset) charset = CHARS.lower;
+  if (options.noAmbiguous) {
+    for (const c of CHARS.ambiguous) {
+      charset = charset.split(c).join('');
+    }
+  }
+  let pw = '';
+  const arr = new Uint32Array(length);
+  crypto.getRandomValues(arr);
+  for (let i = 0; i < length; i++) {
+    pw += charset[arr[i] % charset.length];
+  }
+  return pw;
+}
+
+// ===== DATA HELPERS =====
+async function getAllServices() {
+  let custom = [];
+  try { custom = await loadCustomServices(); } catch(e) {}
+  return [...SERVICES, ...custom];
+}
+
+function getServiceById(id) {
+  // Search built-in first, then try custom
+  const builtin = SERVICES.find(s => s.id === id);
+  if (builtin) return builtin;
+  // Custom services may need async load, but for synchronous usage we check localStorage cache
+  try {
+    const raw = localStorage.getItem('pv_custom_services');
+    if (raw) {
+      // Try to parse as JSON first (unencrypted legacy)
+      try { const arr = JSON.parse(raw); const found = arr.find(s => s.id === id); if (found) return found; } catch(e) {}
+    }
+  } catch(e) {}
+  return null;
+}
+
+async function getServiceByIdAsync(id) {
+  const builtin = SERVICES.find(s => s.id === id);
+  if (builtin) return builtin;
+  const all = await getAllServices();
+  return all.find(s => s.id === id);
+}
+
+async function saveVault(vaultData) {
+  const json = JSON.stringify(vaultData);
+  const enc = await encrypt(json, masterKey);
+  localStorage.setItem('pv_vault', enc);
+}
+
+async function loadVault() {
+  const enc = localStorage.getItem('pv_vault');
+  if (!enc) return { credentials: {} };
+  const json = await decryptData(enc, masterKey);
+  if (!json) return { credentials: {} };
+  try { return JSON.parse(json); } catch(e) { return { credentials: {} }; }
+}
+
+async function saveCustomServices(svcs) {
+  if (masterKey) {
+    const enc = await encrypt(JSON.stringify(svcs), masterKey);
+    localStorage.setItem('pv_custom_services', enc);
+  } else {
+    localStorage.setItem('pv_custom_services', JSON.stringify(svcs));
+  }
+}
+
+async function loadCustomServices() {
+  const raw = localStorage.getItem('pv_custom_services');
+  if (!raw) return [];
+  if (masterKey) {
+    const dec = await decryptData(raw, masterKey);
+    if (dec) { try { return JSON.parse(dec); } catch(e) {} }
+  }
+  // Fall back to unencrypted (legacy)
+  try { return JSON.parse(raw); } catch(e) { return []; }
+}
+
+// ===== UI HELPERS =====
+function showScreen(id) {
+  document.querySelectorAll('.screen, .auth-screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function toggleVis(inputId) {
+  const inp = document.getElementById(inputId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function updateStrengthMeter(inputId, fillId, textId) {
+  const pw = document.getElementById(inputId).value;
+  const s = evaluatePasswordStrength(pw);
+  const fill = document.getElementById(fillId);
+  const text = document.getElementById(textId);
+  if (fill) { fill.style.width = s.width; fill.style.background = s.color; }
+  if (text) { text.textContent = s.label; text.style.color = s.color; }
+}
+
+function catBadge(category) {
+  const cat = CATEGORIES[category] || CATEGORIES.custom;
+  return `<span class="cat-badge" style="background:${cat.color}22;color:${cat.color}">${cat.name}</span>`;
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function showConfirm(title, text, okText, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-text').textContent = text;
+  document.getElementById('confirm-ok').textContent = okText;
+  confirmCallback = cb;
+  document.getElementById('confirm-overlay').classList.add('active');
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('active');
+  confirmCallback = null;
+}
+
+function confirmAction() {
+  if (confirmCallback) confirmCallback();
+  closeConfirm();
+}
+
+function maskPassword(pw) {
+  if (!pw) return '';
+  return '•'.repeat(Math.min(pw.length, 12));
+}
+
+// ===== SETUP =====
+document.getElementById('setup-pw1').addEventListener('input', function() {
+  updateStrengthMeter('setup-pw1', 'setup-strength-fill', 'setup-strength-text');
+  checkSetupMatch();
+});
+
+document.getElementById('setup-pw2').addEventListener('input', checkSetupMatch);
+
+function checkSetupMatch() {
+  const pw1 = document.getElementById('setup-pw1').value;
+  const pw2 = document.getElementById('setup-pw2').value;
+  const hint = document.getElementById('setup-match');
+  const btn = document.getElementById('setup-btn');
+  if (!pw2) { hint.textContent = ''; btn.disabled = true; return; }
+  if (pw1 === pw2) {
+    hint.textContent = '✓ Пароли совпадают';
+    hint.className = 'match-hint ok';
+    btn.disabled = pw1.length < 8;
+  } else {
+    hint.textContent = '✗ Пароли не совпадают';
+    hint.className = 'match-hint err';
+    btn.disabled = true;
+  }
+}
+
+async function doSetup() {
+  const pw = document.getElementById('setup-pw1').value;
+  if (pw.length < 8) return;
+  const { key, hash, salt } = await deriveKeyAndHash(pw);
+  masterKey = key;
+  masterHash = hash;
+  failedAttempts = 0;
+  localStorage.setItem('pv_salt', salt);
+  localStorage.setItem('pv_hash', hash);
+  localStorage.setItem('pv_format', 'v2');
+  await saveVault({ credentials: {} });
+  auditLog('vault_created', null, null, 'success');
+  document.getElementById('setup-pw1').value = '';
+  document.getElementById('setup-pw2').value = '';
+  startAutoLock();
+  enterApp();
+}
+
+// ===== UNLOCK =====
+async function doUnlock() {
+  const now = Date.now();
+  // Check persistent lockout from localStorage
+  const storedLockout = parseInt(localStorage.getItem('pv_lockout_until') || '0', 10);
+  if (storedLockout > now) lockoutUntil = storedLockout;
+  if (now < lockoutUntil) {
+    const waitSec = Math.ceil((lockoutUntil - now) / 1000);
+    const waitMin = Math.floor(waitSec / 60);
+    const remSec = waitSec % 60;
+    showToast('Подождите ' + (waitMin > 0 ? waitMin + ' мин ' : '') + remSec + 'с перед повторной попыткой');
+    return;
+  }
+  const pw = document.getElementById('unlock-pw').value;
+  const salt = localStorage.getItem('pv_salt');
+  const storedHash = localStorage.getItem('pv_hash');
+
+  // Store password in memory ONLY (never in localStorage)
+  let _migratePw = pw;
+
+  const { key, hash } = await deriveKeyAndHash(pw, salt);
+
+  if (constantTimeEqual(hash, storedHash)) {
+    masterKey = key;
+    masterHash = hash;
+    failedAttempts = 0;
+    localStorage.setItem('pv_failed_attempts', '0');
+    localStorage.removeItem('pv_lockout_until');
+    document.getElementById('unlock-pw').value = '';
+    document.getElementById('unlock-error').style.display = 'none';
+
+    // Migrate old format if needed
+    await migrateVaultIfNeeded(key, _migratePw);
+    _migratePw = null; // Clear from memory immediately
+
+    startAutoLock();
+    auditLog('unlock', null, null, 'success');
+    enterApp();
+  } else {
+    failedAttempts++;
+    localStorage.setItem('pv_failed_attempts', String(failedAttempts));
+    _migratePw = null; // Clear from memory
+    const delay = LOCKOUT_DELAYS[Math.min(failedAttempts, LOCKOUT_DELAYS.length - 1)] || 60000;
+    if (delay > 0) {
+      lockoutUntil = Date.now() + delay;
+      localStorage.setItem('pv_lockout_until', String(lockoutUntil));
+    }
+    if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      lockoutUntil = Date.now() + LOCKOUT_DURATION_MS; // 15 min lockout after 5 failed attempts
+      localStorage.setItem('pv_lockout_until', String(lockoutUntil));
+      showToast('Слишком много попыток! Хранилище заблокировано на 15 минут.');
+      auditLog('lockout', null, failedAttempts + ' неудачных попыток', 'failure');
+    }
+    const form = document.querySelector('#screen-unlock .auth-form');
+    form.classList.add('shake');
+    setTimeout(() => form.classList.remove('shake'), 500);
+    document.getElementById('unlock-error').style.display = 'block';
+    const remain = MAX_FAILED_ATTEMPTS - failedAttempts;
+    document.getElementById('unlock-error').textContent = '\u274c \u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c (' + failedAttempts + '/' + MAX_FAILED_ATTEMPTS + '. \u041e\u0441\u0442\u0430\u043b\u043e\u0441\u044c ' + remain + ' \u043f\u043e\u043f\u044b\u0442\u043e\u043a)';
+  }
+}
+
+// ===== APP ENTRY =====
+function enterApp() {
+  const theme = localStorage.getItem('pv_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  updateThemeToggle();
+  showScreen('screen-main');
+  switchTab('vault');
+  renderDashboard();
+  generatePassword();
+}
+
+function lockVault() {
+  if (masterKey) {
+    // CryptoKey objects can't be zeroed directly, but we null the reference
+    // The GC will collect the CryptoKey object which is non-extractable
+    masterKey = null;
+  }
+  masterHash = null;
+  masterKeyCreatedAt = 0;
+  if (masterKeyTtlTimer) { clearTimeout(masterKeyTtlTimer); masterKeyTtlTimer = null; }
+  credMap.clear();
+  clearTimeout(autoLockTimer);
+  // Clear ALL sensitive inputs and textareas
+  document.querySelectorAll('input[type="password"], input[type="text"][id$="-pw"], textarea').forEach(inp => { inp.value = ''; });
+  // Reset visibility states
+  detailPwVisible = false;
+  auditLog('lock', null, null, 'success');
+  showScreen('screen-unlock');
+  document.getElementById('unlock-error').style.display = 'none';
+}
+
+function resetAutoLock() {
+  if (!masterKey) return;
+  clearTimeout(autoLockTimer);
+  autoLockTimer = setTimeout(() => { lockVault(); showToast('Хранилище заблокировано (таймаут)'); }, AUTO_LOCK_MS);
+  // Absolute 30-minute TTL for master key in memory
+  if (!masterKeyTtlTimer && masterKeyCreatedAt > 0) {
+    const remaining = MASTER_KEY_TTL_MS - (Date.now() - masterKeyCreatedAt);
+    if (remaining <= 0) {
+      lockVault();
+      showToast('Мастер-пароль очищен (30 мин истекли)');
+    } else {
+      masterKeyTtlTimer = setTimeout(() => {
+        masterKeyTtlTimer = null;
+        lockVault();
+        showToast('Мастер-пароль очищен (30 мин истекли)');
+      }, remaining);
+    }
+  }
+}
+
+function startAutoLock() {
+  masterKeyCreatedAt = Date.now();
+  masterKeyTtlTimer = null;
+  resetAutoLock();
+  ['click','keydown','mousemove','touchstart','scroll'].forEach(evt => {
+    document.addEventListener(evt, resetAutoLock, { passive: true });
+  });
+  // Lock immediately when app goes to background (security: prevent screenshot/access)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && masterKey) {
+      lockVault();
+      showToast('Хранилище заблокировано (приложение в фоне)');
+    }
+  });
+}
+
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  currentTab = tab;
+  showScreen(tab === 'vault' ? 'screen-main' : tab === 'generator' ? 'screen-generator' : 'screen-settings');
+  // Update tab bars
+  document.querySelectorAll('.tab-bar').forEach(bar => {
+    bar.querySelectorAll('.tab-item').forEach((item, idx) => {
+      const tabs = ['vault','generator','settings'];
+      item.classList.toggle('active', tabs[idx] === tab);
+    });
+  });
+  if (tab === 'vault') renderDashboard();
+}
+
+// ===== DASHBOARD =====
+async function renderDashboard() {
+  const vault = await loadVault();
+  const allServices = await getAllServices();
+  const search = (document.getElementById('search-input')?.value || '').toLowerCase();
+
+  // Stats
+  const credCount = Object.keys(vault.credentials).length;
+  const svcWithCreds = new Set(Object.keys(vault.credentials)).size;
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${svcWithCreds}</div><div class="stat-label">Активных</div></div>
+    <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Записей</div></div>
+    <div class="stat-card"><div class="stat-num">${allServices.length}</div><div class="stat-label">Сервисов</div></div>
+  `;
+
+  // Chips
+  const cats = ['all', ...Object.keys(CATEGORIES)];
+  const catLabels = { all:'Все', ...Object.fromEntries(Object.entries(CATEGORIES).map(([k,v])=>[k,v.name])) };
+  document.getElementById('chips-row').innerHTML = cats.map(c =>
+    `<div class="chip ${currentCategory===c?'active':''}" onclick="setCategory('${c}')">${catLabels[c]}</div>`
+  ).join('');
+
+  // Filter services
+  let filtered = allServices;
+  if (currentCategory !== 'all') filtered = filtered.filter(s => s.category === currentCategory);
+  if (search) filtered = filtered.filter(s => s.name.toLowerCase().includes(search) || s.displayName.toLowerCase().includes(search));
+
+  // Cards
+  if (filtered.length === 0) {
+    document.getElementById('cards-list').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <h3>Ничего не найдено</h3>
+        <p>Попробуйте другой запрос или категорию</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('cards-list').innerHTML = filtered.map(svc => {
+    const cred = vault.credentials[svc.id];
+    const safeId = escHtml(svc.id);
+    if (cred) {
+      return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
+        <div class="svc-icon">${svc.iconEmoji}</div>
+        <div class="svc-info">
+          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
+          <div class="svc-detail">${escHtml(cred.username)} · ${escHtml(maskPassword(cred.password))}</div>
+        </div>
+      </div>`;
+    } else {
+      return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
+        <div class="svc-icon">${svc.iconEmoji}</div>
+        <div class="svc-info">
+          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
+          <div class="svc-detail">Нет учётных данных</div>
+        </div>
+        <button class="svc-action-btn">＋ Добавить</button>
+      </div>`;
+    }
+  }).join('');
+  // Delegated click handler for cards
+  document.getElementById('cards-list').onclick = function(e) {
+    const card = e.target.closest('[data-action]');
+    if (!card) return;
+    if (card.dataset.action === 'detail') openDetail(card.dataset.svc);
+    else if (card.dataset.action === 'add-for') openAddCredentialFor(card.dataset.svc);
+  };
+}
+
+function setCategory(cat) {
+  currentCategory = cat;
+  renderDashboard();
+}
+
+// ===== SERVICE DETAIL =====
+async function openDetail(svcId) {
+  currentDetailServiceId = svcId;
+  const svc = await getServiceByIdAsync(svcId);
+  if (!svc) return;
+  const vault = await loadVault();
+  const cred = vault.credentials[svcId];
+
+  // Store credential safely in credMap (not in DOM)
+  if (cred) credMap.set(svcId, cred);
+
+  document.getElementById('detail-icon').textContent = svc.iconEmoji;
+  document.getElementById('detail-name').textContent = svc.displayName;
+  const cat = CATEGORIES[svc.category] || CATEGORIES.custom;
+  document.getElementById('detail-cat').innerHTML = `<span style="color:${cat.color}">${escHtml(cat.name)}</span>`;
+
+  let html = '';
+
+  if (cred) {
+    html += `
+      <div class="cred-field">
+        <div class="cred-label">Имя пользователя</div>
+        <div class="cred-value-row">
+          <div class="cred-value" id="detail-username">${escHtml(cred.username)}</div>
+          <button class="cred-btn" data-action="copy-user" data-svc="${escHtml(svcId)}">📋</button>
+        </div>
+      </div>
+      <div class="cred-field">
+        <div class="cred-label">Пароль</div>
+        <div class="cred-value-row">
+          <div class="cred-value" id="detail-password">${escHtml(maskPassword(cred.password))}</div>
+          <button class="cred-btn" data-action="toggle-pw" data-svc="${escHtml(svcId)}">👁️</button>
+          <button class="cred-btn" data-action="copy-pw" data-svc="${escHtml(svcId)}">📋</button>
+        </div>
+      </div>`;
+
+    if (cred.notes) {
+      html += `<div class="cred-field">
+        <div class="cred-label">Заметки</div>
+        <div class="cred-value">${escHtml(cred.notes)}</div>
+      </div>`;
+    }
+
+    html += `
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-primary" data-action="wizard" data-svc="${escHtml(svcId)}">🔄 Сменить пароль</button>
+        ${svc.passwordChangeUrl && svc.passwordChangeUrl.startsWith('https://') ? `<button class="btn btn-outline" data-action="open-url" data-url="${escHtml(svc.passwordChangeUrl)}">🔗 Открыть страницу смены пароля</button>` : ''}
+        <button class="btn btn-danger btn-sm" style="margin-top:8px" data-action="delete" data-svc="${escHtml(svcId)}">🗑️ Удалить учётные данные</button>
+      </div>`;
+  }
+
+  if (svc.instructions && svc.instructions.length > 0) {
+    html += `<div style="margin-top:20px;"><div style="font-size:14px;font-weight:700;margin-bottom:8px;">📋 Инструкции по смене пароля</div><ol class="instructions-list">`;
+    svc.instructions.forEach((inst, i) => {
+      html += `<li><span class="step-num">${i+1}</span><span>${escHtml(inst)}</span></li>`;
+    });
+    html += `</ol></div>`;
+  }
+
+  if (cred && svc.twoFactorNote) {
+    html += `<div class="twofa-warning">⚠️ ${escHtml(svc.twoFactorNote)}</div>`;
+  }
+
+  document.getElementById('detail-content').innerHTML = html;
+  // Delegated event listener for safe credential access
+  document.getElementById('detail-content').onclick = function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const clickSvcId = btn.dataset.svc;
+    if (action === 'copy-user' && clickSvcId) { const c = credMap.get(clickSvcId); if (c) { copyToClipboard(c.username, btn); auditLog('copy_username', clickSvcId, null, 'success'); } }
+    else if (action === 'copy-pw' && clickSvcId) { const c = credMap.get(clickSvcId); if (c) { copyToClipboard(c.password, btn); auditLog('copy_password', clickSvcId, null, 'success'); } }
+    else if (action === 'toggle-pw' && clickSvcId) { const c = credMap.get(clickSvcId); if (c) { toggleDetailPw(c.password, btn); auditLog('view_password', clickSvcId, null, 'success'); } }
+    else if (action === 'wizard' && clickSvcId) { startWizard(clickSvcId); auditLog('wizard_start', clickSvcId, null, 'success'); }
+    else if (action === 'delete' && clickSvcId) { deleteCredential(clickSvcId); }
+    else if (action === 'open-url') { const url = btn.dataset.url; if (url && url.startsWith('https://')) { window.open(url, '_blank'); auditLog('open_url', clickSvcId, null, 'success'); } }
+  };
+  showScreen('screen-detail');
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escAttr(s) {
+  if (!s) return '';
+  return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
+}
+
+let detailPwVisible = false;
+function toggleDetailPw(pw, btn) {
+  detailPwVisible = !detailPwVisible;
+  const el = document.getElementById('detail-password');
+  el.textContent = detailPwVisible ? pw : maskPassword(pw);
+  btn.textContent = detailPwVisible ? '🙈' : '👁️';
+}
+
+// Auto-clear clipboard after 30 seconds
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 1200); }
+    showToast('Скопировано! (очищено через 30с)');
+    setTimeout(() => {
+      navigator.clipboard.readText().then(current => {
+        if (current === text) navigator.clipboard.writeText('');
+      }).catch(() => {});
+    }, 30000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.value = '';
+    document.body.removeChild(ta);
+    showToast('Скопировано! (очищено через 30с)');
+    setTimeout(() => { try { navigator.clipboard.writeText(''); } catch(e){} }, 30000);
+  });
+}
+
+function closeDetail() {
+  showScreen('screen-main');
+  switchTab('vault');
+}
+
+async function deleteCredential(svcId) {
+  const svc = await getServiceByIdAsync(svcId);
+  if (!svc) return;
+  showConfirm('Удалить учётные данные?', `Удалить данные для ${svc.displayName}? Это действие нельзя отменить.`, 'Удалить', async () => {
+    const vault = await loadVault();
+    delete vault.credentials[svcId];
+    credMap.delete(svcId); // Clear from memory cache
+    await saveVault(vault);
+    auditLog('credential_delete', svcId, null, 'success');
+    showToast('Удалено');
+    closeDetail();
+    renderDashboard();
+  });
+}
+
+// ===== ADD CREDENTIAL =====
+async function openAddCredential() {
+  const allServices = await getAllServices();
+  const vault = await loadVault();
+  const body = document.getElementById('add-cred-body');
+  body.innerHTML = `
+    <div class="form-group" style="margin-bottom:12px">
+      <div class="search-wrap">
+        <input class="search-input" id="add-cred-search" placeholder="Поиск сервиса..." oninput="filterServicePicker()">
+      </div>
+    </div>
+    <div id="svc-picker-list" style="max-height:300px;overflow-y:auto">
+      ${allServices.map(svc => `
+        <div class="svc-picker-item" data-name="${escHtml(svc.name.toLowerCase())}" data-action="select-svc" data-svc="${escHtml(svc.id)}">
+          <div class="svc-picker-icon">${svc.iconEmoji}</div>
+          <div>
+            <div class="svc-picker-name">${escHtml(svc.displayName)}</div>
+            <div class="svc-picker-cat">${escHtml((CATEGORIES[svc.category]||CATEGORIES.custom).name)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  // Delegated click handler for service picker
+  body.querySelector('#svc-picker-list').onclick = function(e) {
+    const item = e.target.closest('[data-action="select-svc"]');
+    if (item) selectServiceForAdd(item.dataset.svc);
+  };
+  openModal('modal-add-cred');
+  setTimeout(() => document.getElementById('add-cred-search')?.focus(), 100);
+}
+
+function openAddCredentialFor(svcId) {
+  selectServiceForAdd(svcId);
+}
+
+function filterServicePicker() {
+  const q = document.getElementById('add-cred-search').value.toLowerCase();
+  document.querySelectorAll('#svc-picker-list .svc-picker-item').forEach(el => {
+    el.style.display = el.dataset.name.includes(q) ? '' : 'none';
+  });
+}
+
+async function selectServiceForAdd(svcId) {
+  const svc = await getServiceByIdAsync(svcId);
+  if (!svc) return;
+  closeModal('modal-add-cred');
+  const body = document.getElementById('add-cred-body');
+  body.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:40px">${svc.iconEmoji}</div>
+      <div style="font-size:16px;font-weight:700;margin-top:4px">${svc.displayName}</div>
+    </div>
+    <div class="form-group">
+      <label>Имя пользователя / Email</label>
+      <input type="text" class="form-input" id="add-username" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="user@example.com">
+    </div>
+    <div class="form-group">
+      <label>Пароль</label>
+      <div class="input-wrapper">
+        <input type="password" id="add-password" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Пароль">
+        <button class="toggle-vis" onclick="toggleVis('add-password')">👁️</button>
+      </div>
+      <div class="strength-meter"><div class="strength-meter-fill" id="add-strength-fill"></div></div>
+      <div class="strength-text" id="add-strength-text"></div>
+    </div>
+    <div style="text-align:center;margin-bottom:12px">
+      <button class="btn btn-outline btn-sm" onclick="fillGenPw()">🎲 Сгенерировать пароль</button>
+    </div>
+    <div class="form-group">
+      <label>Заметки (необязательно)</label>
+      <textarea class="form-textarea" id="add-notes" placeholder="Дополнительная информация..."></textarea>
+    </div>
+    <button class="btn btn-primary" data-action="save-cred" data-svc="${escHtml(svcId)}">💾 Сохранить</button>
+  `;
+
+  // Delegated handler for save button
+  body.querySelector('[data-action="save-cred"]').onclick = function() {
+    saveCredential(this.dataset.svc);
+  };
+
+  document.getElementById('add-password').addEventListener('input', function() {
+    updateStrengthMeter('add-password', 'add-strength-fill', 'add-strength-text');
+  });
+
+  openModal('modal-add-cred');
+}
+
+function fillGenPw() {
+  const pw = generatePasswordString(16, { upper:true, lower:true, digits:true, symbols:true, noAmbiguous:false });
+  document.getElementById('add-password').value = pw;
+  document.getElementById('add-password').type = 'text';
+  updateStrengthMeter('add-password', 'add-strength-fill', 'add-strength-text');
+}
+
+async function saveCredential(svcId) {
+  const username = document.getElementById('add-username').value.trim();
+  const password = document.getElementById('add-password').value;
+  const notes = document.getElementById('add-notes').value.trim();
+  if (!username || !password) { showToast('Заполните все обязательные поля'); return; }
+  const vault = await loadVault();
+  vault.credentials[svcId] = { username, password, notes, updatedAt: Date.now() };
+  await saveVault(vault);
+  closeModal('modal-add-cred');
+  auditLog('credential_save', svcId, null, 'success');
+  showToast('Сохранено!');
+  renderDashboard();
+}
+
+// ===== CHANGE PASSWORD WIZARD =====
+function startWizard(svcId) {
+  wizardServiceId = svcId;
+  wizardStep = 0;
+  wizardNewPassword = '';
+  showScreen('screen-wizard');
+  renderWizardStep();
+}
+
+async function closeWizard() {
+  showScreen('screen-detail');
+  await openDetail(currentDetailServiceId);
+}
+
+async function renderWizardStep() {
+  // Dots
+  for (let i = 0; i < 3; i++) {
+    const dot = document.getElementById('wdot-' + i);
+    dot.className = 'wizard-dot' + (i === wizardStep ? ' active' : i < wizardStep ? ' done' : '');
+  }
+
+  const svc = await getServiceByIdAsync(wizardServiceId);
+  if (!svc) return;
+  const vault = await loadVault();
+  const cred = vault.credentials[wizardServiceId];
+  const content = document.getElementById('wizard-content');
+  const actions = document.getElementById('wizard-actions');
+
+  if (wizardStep === 0) {
+    content.innerHTML = `
+      <div class="wizard-step-title">Шаг 1: Подготовка</div>
+      <div class="wizard-step-desc">Введите новый пароль для ${escHtml(svc.displayName)}</div>
+      <div class="form-group">
+        <label>Новый пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="wiz-new-pw" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Введите новый пароль">
+          <button class="toggle-vis" onclick="toggleVis('wiz-new-pw')">👁️</button>
+        </div>
+        <div class="strength-meter"><div class="strength-meter-fill" id="wiz-strength-fill"></div></div>
+        <div class="strength-text" id="wiz-strength-text"></div>
+      </div>
+      <div class="form-group">
+        <label>Подтвердите пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="wiz-confirm-pw" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Повторите пароль">
+          <button class="toggle-vis" onclick="toggleVis('wiz-confirm-pw')">👁️</button>
+        </div>
+        <div class="match-hint" id="wiz-match"></div>
+      </div>
+      <div style="text-align:center;margin-top:8px">
+        <button class="btn btn-outline btn-sm" onclick="wizFillGen()">🎲 Сгенерировать</button>
+      </div>`;
+
+    document.getElementById('wiz-new-pw').addEventListener('input', function() {
+      updateStrengthMeter('wiz-new-pw', 'wiz-strength-fill', 'wiz-strength-text');
+      checkWizMatch();
+    });
+    document.getElementById('wiz-confirm-pw').addEventListener('input', checkWizMatch);
+
+    actions.innerHTML = `<button class="btn btn-outline" style="flex:1" onclick="closeWizard()">Отмена</button>
+      <button class="btn btn-primary" style="flex:1" id="wiz-next-0" onclick="wizardNext()" disabled>Далее →</button>`;
+  } else if (wizardStep === 1) {
+    content.innerHTML = `
+      <div class="wizard-step-title">Шаг 2: Смена пароля</div>
+      <div class="wizard-step-desc">Следуйте инструкциям для смены пароля на ${escHtml(svc.displayName)}</div>
+
+      ${svc.instructions ? `<div style="margin-bottom:16px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">📋 Инструкции</div>
+        <ol class="instructions-list">${svc.instructions.map((inst,i) => `<li><span class="step-num">${i+1}</span><span>${escHtml(inst)}</span></li>`).join('')}</ol>
+      </div>` : ''}
+
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px">📋 Данные для копирования</div>
+      <div class="copy-field">
+        <span class="copy-label">Логин</span>
+        <span class="copy-value">${escHtml(cred?.username || '')}</span>
+        <button class="copy-btn" onclick="copyToClipboard('${escAttr(cred?.username || '')}')">Копировать</button>
+      </div>
+      <div class="copy-field">
+        <span class="copy-label">Текущий</span>
+        <span class="copy-value">${maskPassword(cred?.password || '')}</span>
+        <button class="copy-btn" onclick="copyToClipboard('${escAttr(cred?.password || '')}')">Копировать</button>
+      </div>
+      <div class="copy-field">
+        <span class="copy-label">Новый</span>
+        <span class="copy-value">${escHtml(wizardNewPassword)}</span>
+        <button class="copy-btn" onclick="copyToClipboard('${escAttr(wizardNewPassword)}')">Копировать</button>
+      </div>
+
+      ${svc.passwordChangeUrl ? `<button class="btn btn-outline" style="margin-top:12px" onclick="window.open('${svc.passwordChangeUrl}','_blank')">🔗 Открыть страницу смены пароля</button>` : ''}
+
+      ${svc.twoFactorNote ? `<div class="twofa-warning" style="margin-top:12px">⚠️ ${escHtml(svc.twoFactorNote)}</div>` : ''}`;
+
+    actions.innerHTML = `<button class="btn btn-outline" style="flex:1" onclick="wizardBack()">← Назад</button>
+      <button class="btn btn-primary" style="flex:1" onclick="wizardNext()">Далее →</button>`;
+  } else if (wizardStep === 2) {
+    content.innerHTML = `
+      <div class="wizard-step-title">Шаг 3: Подтверждение</div>
+      <div class="wizard-step-desc">Подтвердите успешную смену пароля на ${escHtml(svc.displayName)}</div>
+      <div style="text-align:center;padding:32px 0">
+        <div style="font-size:64px;margin-bottom:16px">✅</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">Пароль успешно изменён?</div>
+        <div style="font-size:13px;color:var(--text-muted)">Нажмите «Подтвердить», чтобы обновить пароль в хранилище</div>
+      </div>`;
+
+    actions.innerHTML = `<button class="btn btn-outline" style="flex:1" onclick="wizardBack()">← Назад</button>
+      <button class="btn btn-primary" style="flex:1" onclick="wizardConfirm()">✓ Подтвердить</button>`;
+  }
+}
+
+function checkWizMatch() {
+  const pw1 = document.getElementById('wiz-new-pw').value;
+  const pw2 = document.getElementById('wiz-confirm-pw').value;
+  const hint = document.getElementById('wiz-match');
+  const btn = document.getElementById('wiz-next-0');
+  if (!pw2) { hint.textContent = ''; btn.disabled = true; return; }
+  if (pw1 === pw2 && pw1.length >= 8) {
+    hint.textContent = '✓ Пароли совпадают';
+    hint.className = 'match-hint ok';
+    btn.disabled = false;
+  } else {
+    hint.textContent = pw1 !== pw2 ? '✗ Пароли не совпадают' : '✗ Минимум 8 символов';
+    hint.className = 'match-hint err';
+    btn.disabled = true;
+  }
+}
+
+function wizFillGen() {
+  const pw = generatePasswordString(16, { upper:true, lower:true, digits:true, symbols:true, noAmbiguous:false });
+  document.getElementById('wiz-new-pw').value = pw;
+  document.getElementById('wiz-new-pw').type = 'text';
+  document.getElementById('wiz-confirm-pw').value = pw;
+  document.getElementById('wiz-confirm-pw').type = 'text';
+  updateStrengthMeter('wiz-new-pw', 'wiz-strength-fill', 'wiz-strength-text');
+  checkWizMatch();
+}
+
+function wizardNext() {
+  if (wizardStep === 0) {
+    wizardNewPassword = document.getElementById('wiz-new-pw').value;
+    if (wizardNewPassword.length < 8) return;
+  }
+  wizardStep++;
+  renderWizardStep();
+}
+
+function wizardBack() {
+  wizardStep--;
+  renderWizardStep();
+}
+
+async function wizardConfirm() {
+  const vault = await loadVault();
+  if (vault.credentials[wizardServiceId]) {
+    vault.credentials[wizardServiceId].password = wizardNewPassword;
+    vault.credentials[wizardServiceId].updatedAt = Date.now();
+    await saveVault(vault);
+  }
+  showToast('Пароль обновлён!');
+  closeWizard();
+  renderDashboard();
+}
+
+// ===== PASSWORD GENERATOR =====
+function updateGenLength() {
+  document.getElementById('gen-length-val').textContent = document.getElementById('gen-length').value;
+}
+
+function toggleGen(id) {
+  const btn = document.getElementById(id);
+  btn.classList.toggle('on');
+  generatePassword();
+}
+
+function generatePassword() {
+  const length = parseInt(document.getElementById('gen-length').value);
+  const options = {
+    upper: document.getElementById('gen-upper').classList.contains('on'),
+    lower: document.getElementById('gen-lower').classList.contains('on'),
+    digits: document.getElementById('gen-digits').classList.contains('on'),
+    symbols: document.getElementById('gen-symbols').classList.contains('on'),
+    noAmbiguous: document.getElementById('gen-noAmbiguous').classList.contains('on')
+  };
+  const pw = generatePasswordString(length, options);
+  document.getElementById('gen-output').textContent = pw;
+  const s = evaluatePasswordStrength(pw);
+  document.getElementById('gen-strength-fill').style.width = s.width;
+  document.getElementById('gen-strength-fill').style.background = s.color;
+  document.getElementById('gen-strength-text').textContent = s.label;
+  document.getElementById('gen-strength-text').style.color = s.color;
+}
+
+function copyGenPassword() {
+  const pw = document.getElementById('gen-output').textContent;
+  if (pw && pw !== '—') copyToClipboard(pw);
+}
+
+// ===== THEME =====
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('pv_theme', next);
+  updateThemeToggle();
+}
+
+function updateThemeToggle() {
+  const theme = document.documentElement.getAttribute('data-theme');
+  const toggle = document.getElementById('theme-toggle');
+  const status = document.getElementById('theme-status');
+  if (toggle) toggle.className = 'toggle-switch' + (theme === 'dark' ? ' on' : '');
+  if (status) status.textContent = theme === 'dark' ? 'Включена' : 'Выключена';
+}
+
+// ===== ADD CUSTOM SERVICE =====
+function openAddCustomService() {
+  const body = document.getElementById('custom-svc-body');
+  body.innerHTML = `
+    <div class="form-group">
+      <label>Идентификатор (латиница, без пробелов)</label>
+      <input type="text" id="cs-id" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="my-service">
+    </div>
+    <div class="form-group">
+      <label>Название</label>
+      <input type="text" id="cs-display" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Мой Сервис">
+    </div>
+    <div class="form-group">
+      <label>Категория</label>
+      <select class="form-select" id="cs-category">
+        ${Object.entries(CATEGORIES).map(([k,v]) => `<option value="${k}">${v.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>URL смены пароля</label>
+      <input type="url" id="cs-pwurl" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label>URL входа</label>
+      <input type="url" id="cs-loginurl" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label>Инструкции (по одной на строку)</label>
+      <textarea class="form-textarea" id="cs-instructions" placeholder="Перейдите на сайт&#10;Откройте настройки&#10;Смените пароль"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Примечание о 2FA (необязательно)</label>
+      <input type="text" id="cs-2fa" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Сервис использует 2FA...">
+    </div>
+    <button class="btn btn-primary" onclick="saveCustomService()">💾 Сохранить сервис</button>
+  `;
+  openModal('modal-custom-svc');
+}
+
+async function saveCustomService() {
+  const idRaw = document.getElementById('cs-id').value.trim().replace(/\s+/g, '-').toLowerCase();
+  // Validate ID: only alphanumeric and hyphens (prevent XSS)
+  const id = idRaw.replace(/[^a-z0-9-]/g, '');
+  const displayName = document.getElementById('cs-display').value.trim();
+  const category = document.getElementById('cs-category').value;
+  const passwordChangeUrl = document.getElementById('cs-pwurl').value.trim();
+  const loginUrl = document.getElementById('cs-loginurl').value.trim();
+  const instructionsRaw = document.getElementById('cs-instructions').value.trim();
+  const twoFactorNote = document.getElementById('cs-2fa').value.trim() || null;
+
+  if (!id || !displayName) { showToast('Заполните обязательные поля'); return; }
+  if (id.length < 2) { showToast('ID слишком короткий'); return; }
+  // Validate URLs: only https allowed
+  if (passwordChangeUrl && !passwordChangeUrl.startsWith('https://')) { showToast('URL смены пароля должен начинаться с https://'); return; }
+  if (loginUrl && !loginUrl.startsWith('https://')) { showToast('URL входа должен начинаться с https://'); return; }
+
+  const instructions = instructionsRaw ? instructionsRaw.split('\n').map(s=>s.trim()).filter(Boolean) : [];
+  const emojis = { email:'📧', social:'💬', dev:'🔧', cloud:'☁️', messaging:'📱', finance:'💰', streaming:'🎬', gaming:'🎮', ecommerce:'🛒', custom:'⭐' };
+
+  const newSvc = {
+    id: 'custom_' + id,
+    name: displayName,
+    displayName,
+    category,
+    iconEmoji: emojis[category] || '⭐',
+    passwordChangeUrl,
+    loginUrl,
+    usernameSelector: '',
+    currentPasswordSelector: '',
+    newPasswordSelector: '',
+    confirmPasswordSelector: '',
+    submitSelector: '',
+    instructions,
+    twoFactorNote
+  };
+
+  const custom = await loadCustomServices();
+  const allSvc = await getAllServices();
+  // Check duplicate
+  if (allSvc.find(s => s.id === newSvc.id)) {
+    showToast('Сервис с таким ID уже существует');
+    return;
+  }
+  custom.push(newSvc);
+  await saveCustomServices(custom);
+  closeModal('modal-custom-svc');
+  showToast('Сервис добавлен!');
+  renderDashboard();
+}
+
+function showAbout() {
+  openModal('modal-about');
+}
+
+async function showAuditLog() {
+  const body = document.getElementById('audit-log-body');
+  const logs = await getAllAuditLogs();
+  const actionLabels = {
+    vault_created: 'Создание хранилища',
+    unlock: 'Разблокировка',
+    lock: 'Блокировка',
+    lockout: 'Блокировка (превышен лимит)',
+    credential_save: 'Сохранение учётных данных',
+    credential_delete: 'Удаление учётных данных',
+    copy_password: 'Копирование пароля',
+    copy_username: 'Копирование логина',
+    view_password: 'Просмотр пароля',
+    wizard_start: 'Запуск мастера смены пароля',
+    open_url: 'Открытие ссылки смены пароля'
+  };
+  const resultLabels = { success: 'Успешно', failure: 'Ошибка' };
+  if (logs.length === 0) {
+    body.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Журнал пуст</h3><p>Действия будут отображаться здесь</p></div>';
+  } else {
+    body.innerHTML = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Последние ' + logs.length + ' событий (зашифровано)</div>' +
+      logs.map(log => {
+        const d = new Date(log.ts);
+        const time = d.toLocaleDateString('ru') + ' ' + d.toLocaleTimeString('ru');
+        const label = actionLabels[log.action] || log.action;
+        const resultTag = log.result ? '<span style="font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px;background:' + (log.result === 'success' ? 'rgba(34,197,94,0.15);color:#22c55e' : 'rgba(239,68,68,0.15);color:#ef4444') + '">' + (resultLabels[log.result] || log.result) + '</span>' : '';
+        return '<div class="cred-field" style="padding:10px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:13px;font-weight:600">' + escHtml(label) + resultTag + '</div><div style="font-size:11px;color:var(--text-muted)">' + time + '</div></div>' + (log.svc ? '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Сервис: ' + escHtml(log.svc) + '</div>' : '') + (log.detail ? '<div style="font-size:12px;color:var(--danger);margin-top:2px">' + escHtml(log.detail) + '</div>' : '') + (log.platform ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">Платформа: ' + escHtml(log.platform) + '</div>' : '') + '</div>';
+      }).join('');
+  }
+  openModal('modal-audit');
+}
+
+function showSecurityInfo() {
+  const body = document.getElementById('security-info-body');
+  const vaultFormat = localStorage.getItem('pv_format') || 'v1';
+  body.innerHTML = '<div style="padding:8px 0">' +
+    '<div class="cred-field"><div class="cred-label">Алгоритм шифрования</div><div class="cred-value">AES-256-GCM</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Ключевая деривация</div><div class="cred-value">PBKDF2-SHA256 (600 000 итераций)</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Генерация IV</div><div class="cred-value">crypto.getRandomValues() (CSPRNG)</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Хранение ключа</div><div class="cred-value">Non-extractable CryptoKey</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Формат хранилища</div><div class="cred-value">' + (vaultFormat === 'v2' ? 'v2 (Web Crypto API)' : 'v1 (устаревший)') + '</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Автоблокировка</div><div class="cred-value">5 мин бездействия / 30 мин TTL ключа / при уходе в фон</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Защита от брутфорса</div><div class="cred-value">5 попыток, затем блокировка 15 мин</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Очистка буфера</div><div class="cred-value">Через 30 секунд после копирования</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Сравнение хэшей</div><div class="cred-value">Constant-time (защита от timing-атак)</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Данные</div><div class="cred-value">Хранятся только локально на устройстве</div></div>' +
+    '<div class="cred-field"><div class="cred-label">CSP</div><div class="cred-value">Content-Security-Policy включена</div></div>' +
+  '</div>';
+  openModal('modal-security');
+}
+
+// ===== INIT =====
+function init() {
+  const hash = localStorage.getItem('pv_hash');
+  if (hash) {
+    showScreen('screen-unlock');
+  } else {
+    showScreen('screen-setup');
+  }
+
+  // Load theme
+  const theme = localStorage.getItem('pv_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+init();
+</script>
+</body>
+</html>

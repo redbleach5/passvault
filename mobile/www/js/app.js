@@ -6,10 +6,12 @@ import { state } from './state.js';
 import { deriveKeyAndHash, constantTimeEqual, migrateVaultIfNeeded } from './crypto.js';
 import { preLoadSecureData, syncToSecureStorage } from './storage.js';
 import { auditLog } from './audit.js';
-import { showScreen, showToast, updateStrengthMeter, closeConfirm, confirmAction } from './ui.js';
-import { lockVault, startAutoLock, enterApp, switchTab } from './ui/screens.js';
+import { showScreen, showToast, updateStrengthMeter, closeConfirm, confirmAction, toggleVis, closeModal } from './ui.js';
+import { lockVault, startAutoLock, enterApp, switchTab, toggleTheme } from './ui/screens.js';
 import { renderDashboard, saveVault } from './ui/vault.js';
 import { generatePassword } from './ui/generator.js';
+// Import settings module to register all onclick handlers on window
+import './ui/settings.js';
 
 // ===== Setup =====
 
@@ -212,6 +214,9 @@ window.confirmAction = confirmAction;
 window.switchTab = switchTab;
 window.lockVault = lockVault;
 window.renderDashboard = renderDashboard;
+window.toggleTheme = toggleTheme;
+window.toggleVis = toggleVis;
+window.closeModal = closeModal;
 window.openAddCredential = async () => {
   const { openAddCredential } = await import('./ui/vault.js');
   openAddCredential();

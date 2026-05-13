@@ -19,8 +19,21 @@ async function switchTab(tab) {
     });
   });
   if (tab === 'vault') {
-    const { renderDashboard } = await import('./vault.js');
-    renderDashboard();
+    try {
+      const { renderDashboard } = await import('./vault.js');
+      await renderDashboard();
+    } catch(e) {
+      console.error('renderDashboard failed:', e);
+      // Show fallback content
+      const cardsList = document.getElementById('cards-list');
+      const statsRow = document.getElementById('stats-row');
+      if (statsRow && !statsRow.innerHTML) {
+        statsRow.innerHTML = '<div class="stat-card"><div class="stat-num">0</div><div class="stat-label">Сохранено</div></div><div class="stat-card"><div class="stat-num">0%</div><div class="stat-label">Здоровье</div></div><div class="stat-card"><div class="stat-num">24</div><div class="stat-label">Без пароля</div></div>';
+      }
+      if (cardsList && !cardsList.innerHTML) {
+        cardsList.innerHTML = '<div class="empty-state"><div class="empty-icon">🔐</div><h3>Начните добавлять пароли</h3><p>Нажмите + чтобы сохранить первый пароль</p><button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;margin-top:16px">Добавить сервис</button></div>';
+      }
+    }
   }
 }
 
@@ -159,6 +172,7 @@ function startAutoLock() {
   state.MASTER_KEY_TTL_MS = savedMasterKeyTtlMs !== null ? parseInt(savedMasterKeyTtlMs, 10) : 30 * 60 * 1000;
 
   state.masterKeyCreatedAt = Date.now();
+  state._vaultUnlockTime = Date.now(); // Grace period start
   state.masterKeyTtlTimer = null;
   resetAutoLock();
   if (!state._autoLockListenersAdded) {
@@ -168,6 +182,12 @@ function startAutoLock() {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && state.masterKey) {
+        // Grace period: don't lock immediately after vault creation/unlock
+        const elapsed = Date.now() - state._vaultUnlockTime;
+        if (elapsed < (state.VAULT_LOCK_GRACE_MS || 3000)) {
+          console.log('Auto-lock skipped (grace period)');
+          return;
+        }
         lockVault();
         showToast('Хранилище заблокировано (приложение в фоне)');
       }
@@ -178,14 +198,24 @@ function startAutoLock() {
 // ===== App entry =====
 
 async function enterApp() {
-  // Apply saved theme mode (defaults to 'system')
-  const mode = localStorage.getItem('pv_theme_mode') || 'system';
-  applyThemeMode(mode);
-  showScreen('screen-main');
-  switchTab('vault');
-  // Dynamic import to avoid circular dependency
-  const { generatePassword } = await import('./generator.js');
-  generatePassword();
+  try {
+    // Apply saved theme mode (defaults to 'system')
+    const mode = localStorage.getItem('pv_theme_mode') || 'system';
+    applyThemeMode(mode);
+    showScreen('screen-main');
+    await switchTab('vault');
+    // Dynamic import to avoid circular dependency
+    const { generatePassword } = await import('./generator.js');
+    generatePassword();
+  } catch(e) {
+    console.error('enterApp error:', e);
+    // Ensure main screen is shown even on error
+    showScreen('screen-main');
+    const cardsList = document.getElementById('cards-list');
+    if (cardsList && !cardsList.innerHTML) {
+      cardsList.innerHTML = '<div class="empty-state"><div class="empty-icon">🔐</div><h3>Начните добавлять пароли</h3><p>Нажмите + чтобы сохранить первый пароль</p><button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;margin-top:16px">Добавить сервис</button></div>';
+    }
+  }
 }
 
 export {

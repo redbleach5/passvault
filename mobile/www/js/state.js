@@ -28,6 +28,10 @@ const state = {
   masterKeyTtlTimer: null,
   detailPwVisible: false,
 
+  // Grace period after vault creation/unlock to prevent immediate lock by visibilitychange
+  _vaultUnlockTime: 0,
+  VAULT_LOCK_GRACE_MS: 3000,  // 3 second grace period
+
   // Rate limiting
   failedAttempts: parseInt(localStorage.getItem('pv_failed_attempts') || '0', 10),
   lockoutUntil: parseInt(localStorage.getItem('pv_lockout_until') || '0', 10),

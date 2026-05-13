@@ -76,112 +76,125 @@ async function loadCustomServices() {
 // ===== Dashboard =====
 
 async function renderDashboard() {
-  const vault = await loadVault();
-  const allServices = await getAllServices();
-  const search = (document.getElementById('search-input')?.value || '').toLowerCase();
+  try {
+    const vault = await loadVault();
+    const allServices = await getAllServices();
+    const search = (document.getElementById('search-input')?.value || '').toLowerCase();
 
-  const credKeys = Object.keys(vault.credentials);
-  const credCount = credKeys.length;
+    const credKeys = Object.keys(vault.credentials);
+    const credCount = credKeys.length;
 
-  // Password health score: percentage of passwords with score >= 3 (Good/Excellent)
-  let goodCount = 0;
-  let evaluatedCount = 0;
-  credKeys.forEach(key => {
-    const pw = vault.credentials[key]?.password;
-    if (pw) {
-      const strength = evaluatePasswordStrength(pw);
-      evaluatedCount++;
-      if (strength.score >= 3) goodCount++;
-    }
-  });
-  const healthPct = evaluatedCount > 0 ? Math.round((goodCount / evaluatedCount) * 100) : 0;
-  const healthColor = healthPct >= 75 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#ef4444';
-
-  // Services without credentials
-  const svcIdsWithCreds = new Set(credKeys);
-  const withoutCredCount = allServices.filter(s => !svcIdsWithCreds.has(s.id)).length;
-
-  document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Сохранено</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:${healthColor}">${healthPct}%</div><div class="stat-label">Здоровье паролей</div></div>
-    <div class="stat-card"><div class="stat-num">${withoutCredCount}</div><div class="stat-label">Без пароля</div></div>
-  `;
-
-  const cats = ['all', ...Object.keys(CATEGORIES)];
-  const catLabels = { all:'Все', ...Object.fromEntries(Object.entries(CATEGORIES).map(([k,v])=>[k,v.name])) };
-  document.getElementById('chips-row').innerHTML = cats.map(c =>
-    `<div class="chip ${state.currentCategory===c?'active':''}" onclick="setCategory('${c}')">${catLabels[c]}</div>`
-  ).join('');
-
-  let filtered = allServices;
-  if (state.currentCategory !== 'all') filtered = filtered.filter(s => s.category === state.currentCategory);
-  if (search) filtered = filtered.filter(s => s.name.toLowerCase().includes(search) || s.displayName.toLowerCase().includes(search));
-
-  if (filtered.length === 0 && credCount === 0) {
-    // First-time user — helpful empty state with action
-    document.getElementById('cards-list').innerHTML = `
-      <div class="empty-state" style="text-align:center;padding:40px 20px;">
-        <div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div>
-        <h3 style="margin:0 0 8px;">Начните добавлять пароли</h3>
-        <p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p>
-        <button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Нажмите чтобы добавить первый сервис</button>
-      </div>`;
-    return;
-  }
-
-  if (filtered.length === 0) {
-    document.getElementById('cards-list').innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h3>Ничего не найдено</h3>
-        <p>Попробуйте другой запрос или категорию</p>
-      </div>`;
-    return;
-  }
-
-  document.getElementById('cards-list').innerHTML = filtered.map(svc => {
-    const cred = vault.credentials[svc.id];
-    const safeId = escHtml(svc.id);
-    if (cred) {
-      const strength = evaluatePasswordStrength(cred.password);
-      const dotColor = strength.score >= 3 ? '#22c55e' : strength.score === 2 ? '#f59e0b' : '#ef4444';
-      return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
-        <div class="svc-icon">${svc.iconEmoji}</div>
-        <div class="svc-info">
-          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
-          <div class="svc-detail"><span style="color:${dotColor};margin-right:4px;">●</span>${escHtml(cred.username)} \u00b7 ${escHtml(maskPassword(cred.password))}</div>
-        </div>
-        <button class="svc-action-btn" style="font-size:12px;padding:4px 8px;" data-action="quick-copy-pw" data-svc="${safeId}" title="Скопировать пароль">📋</button>
-      </div>`;
-    } else {
-      return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
-        <div class="svc-icon">${svc.iconEmoji}</div>
-        <div class="svc-info">
-          <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
-          <div class="svc-detail">Нет учётных данных</div>
-        </div>
-        <button class="svc-action-btn">+ Добавить</button>
-      </div>`;
-    }
-  }).join('');
-
-  document.getElementById('cards-list').onclick = function(e) {
-    const el = e.target.closest('[data-action]');
-    if (!el) return;
-    const action = el.dataset.action;
-    const svcId = el.dataset.svc;
-    if (action === 'quick-copy-pw') {
-      e.stopPropagation();
-      const cred = vault.credentials[svcId];
-      if (cred) {
-        copyToClipboard(cred.password, el);
-        auditLog('copy_password', svcId, null, 'success');
+    // Password health score: percentage of passwords with score >= 3 (Good/Excellent)
+    let goodCount = 0;
+    let evaluatedCount = 0;
+    credKeys.forEach(key => {
+      const pw = vault.credentials[key]?.password;
+      if (pw) {
+        const strength = evaluatePasswordStrength(pw);
+        evaluatedCount++;
+        if (strength.score >= 3) goodCount++;
       }
+    });
+    const healthPct = evaluatedCount > 0 ? Math.round((goodCount / evaluatedCount) * 100) : 0;
+    const healthColor = healthPct >= 75 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#ef4444';
+
+    // Services without credentials
+    const svcIdsWithCreds = new Set(credKeys);
+    const withoutCredCount = allServices.filter(s => !svcIdsWithCreds.has(s.id)).length;
+
+    document.getElementById('stats-row').innerHTML = `
+      <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Сохранено</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:${healthColor}">${healthPct}%</div><div class="stat-label">Здоровье паролей</div></div>
+      <div class="stat-card"><div class="stat-num">${withoutCredCount}</div><div class="stat-label">Без пароля</div></div>
+    `;
+
+    const cats = ['all', ...Object.keys(CATEGORIES)];
+    const catLabels = { all:'Все', ...Object.fromEntries(Object.entries(CATEGORIES).map(([k,v])=>[k,v.name])) };
+    document.getElementById('chips-row').innerHTML = cats.map(c =>
+      `<div class="chip ${state.currentCategory===c?'active':''}" onclick="setCategory('${c}')">${catLabels[c]}</div>`
+    ).join('');
+
+    let filtered = allServices;
+    if (state.currentCategory !== 'all') filtered = filtered.filter(s => s.category === state.currentCategory);
+    if (search) filtered = filtered.filter(s => s.name.toLowerCase().includes(search) || s.displayName.toLowerCase().includes(search));
+
+    if (filtered.length === 0 && credCount === 0) {
+      // First-time user — helpful empty state with action
+      document.getElementById('cards-list').innerHTML = `
+        <div class="empty-state" style="text-align:center;padding:40px 20px;">
+          <div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div>
+          <h3 style="margin:0 0 8px;">Начните добавлять пароли</h3>
+          <p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p>
+          <button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Нажмите чтобы добавить первый сервис</button>
+        </div>`;
       return;
     }
-    if (action === 'detail') openDetail(svcId);
-    else if (action === 'add-for') openAddCredentialFor(svcId);
-  };
+
+    if (filtered.length === 0) {
+      document.getElementById('cards-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <h3>Ничего не найдено</h3>
+          <p>Попробуйте другой запрос или категорию</p>
+        </div>`;
+      return;
+    }
+
+    document.getElementById('cards-list').innerHTML = filtered.map(svc => {
+      const cred = vault.credentials[svc.id];
+      const safeId = escHtml(svc.id);
+      if (cred) {
+        const strength = evaluatePasswordStrength(cred.password);
+        const dotColor = strength.score >= 3 ? '#22c55e' : strength.score === 2 ? '#f59e0b' : '#ef4444';
+        return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
+          <div class="svc-icon">${svc.iconEmoji}</div>
+          <div class="svc-info">
+            <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
+            <div class="svc-detail"><span style="color:${dotColor};margin-right:4px;">●</span>${escHtml(cred.username)} \u00b7 ${escHtml(maskPassword(cred.password))}</div>
+          </div>
+          <button class="svc-action-btn" style="font-size:12px;padding:4px 8px;" data-action="quick-copy-pw" data-svc="${safeId}" title="Скопировать пароль">📋</button>
+        </div>`;
+      } else {
+        return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
+          <div class="svc-icon">${svc.iconEmoji}</div>
+          <div class="svc-info">
+            <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
+            <div class="svc-detail">Нет учётных данных</div>
+          </div>
+          <button class="svc-action-btn">+ Добавить</button>
+        </div>`;
+      }
+    }).join('');
+
+    document.getElementById('cards-list').onclick = function(e) {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const action = el.dataset.action;
+      const svcId = el.dataset.svc;
+      if (action === 'quick-copy-pw') {
+        e.stopPropagation();
+        const cred = vault.credentials[svcId];
+        if (cred) {
+          copyToClipboard(cred.password, el);
+          auditLog('copy_password', svcId, null, 'success');
+        }
+        return;
+      }
+      if (action === 'detail') openDetail(svcId);
+      else if (action === 'add-for') openAddCredentialFor(svcId);
+    };
+  } catch(e) {
+    console.error('renderDashboard error:', e);
+    // Show fallback UI instead of blank screen
+    const cardsList = document.getElementById('cards-list');
+    const statsRow = document.getElementById('stats-row');
+    if (statsRow) {
+      statsRow.innerHTML = '<div class="stat-card"><div class="stat-num">0</div><div class="stat-label">Сохранено</div></div><div class="stat-card"><div class="stat-num">—</div><div class="stat-label">Здоровье</div></div><div class="stat-card"><div class="stat-num">24</div><div class="stat-label">Без пароля</div></div>';
+    }
+    if (cardsList) {
+      cardsList.innerHTML = '<div class="empty-state"><div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div><h3>Начните добавлять пароли</h3><p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p><button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Добавить сервис</button></div>';
+    }
+  }
 }
 
 function setCategory(cat) {

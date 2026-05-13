@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://fcmregistrations.googleapis.com https:; font-src 'self'; media-src 'none'; object-src 'none';">
-<!-- PassVault v5.4.0 — Fix setup button (inline fallback), Biometric Class 2, Native file picker -->
+<!-- PassVault v5.5.0 — Fix empty menu after vault creation, robust error handling, grace period for auto-lock -->
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -1526,7 +1526,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.3.1</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.5.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1606,7 +1606,7 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 5.3.1</div>
+        <div class="about-version">Версия 5.5.0</div>
         <div class="about-desc">
           PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
@@ -1780,11 +1780,20 @@ select.form-select:focus { border-color: var(--accent); }
       var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},aesKey,enc.encode('{"credentials":{}}'));
       var b64=function(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf)))};
       localStorage.setItem('pv_vault',b64(iv)+':'+b64(ct));
-      // Switch to unlock screen
+      // Clear password fields
       document.getElementById('setup-pw1').value='';
       document.getElementById('setup-pw2').value='';
-      document.getElementById('screen-setup').classList.remove('active');
-      document.getElementById('screen-unlock').classList.add('active');
+      // Try to enter app directly (if module is loaded)
+      if(window.enterApp){
+        try{await window.enterApp();}catch(e3){
+          document.getElementById('screen-setup').classList.remove('active');
+          document.getElementById('screen-main').classList.add('active');
+        }
+      }else{
+        // Module not loaded yet — show main screen with basic content
+        document.getElementById('screen-setup').classList.remove('active');
+        document.getElementById('screen-main').classList.add('active');
+      }
       btn.disabled=false;btn.textContent='Создать хранилище';
     }catch(e){
       errEl.textContent='Ошибка: '+e.message;errEl.style.display='block';

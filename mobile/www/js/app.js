@@ -81,7 +81,14 @@ async function doSetup() {
     document.getElementById('setup-pw1').value = '';
     document.getElementById('setup-pw2').value = '';
     startAutoLock();
-    enterApp();
+    try {
+      await enterApp();
+    } catch(e) {
+      console.error('enterApp failed after setup:', e);
+      // Fallback: force show main screen
+      showScreen('screen-main');
+      try { renderDashboard(); } catch(e2) { console.error('renderDashboard fallback failed:', e2); }
+    }
     btn.disabled = false;
     btn.textContent = 'Создать хранилище';
   } catch(e) {

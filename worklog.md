@@ -189,3 +189,29 @@ Stage Summary:
 - File picker now shows all files including .vault backups
 - APK: /home/z/my-project/download/passvault.apk
 - GitHub Release: https://github.com/redbleach5/passvault/releases/tag/v5.2.0
+
+---
+Task ID: v5.3.0
+Agent: Main Agent
+Task: Fix biometric Class 2 error and file picker issue, verify all menu items present
+
+Work Log:
+- Audited all 12 settings menu items in HTML vs window bindings — all present and correct
+- Verified BiometricPlugin.java already has Class 2 fix (no CryptoObject, supports BIOMETRIC_STRONG|BIOMETRIC_WEAK|DEVICE_CREDENTIAL)
+- Created FilePickerPlugin.java — native Android plugin using ACTION_OPEN_DOCUMENT and ACTION_CREATE_DOCUMENT for full filesystem access
+- Registered FilePickerPlugin in MainActivity.java
+- Created www/js/filepicker.js — JS wrapper for native file picker with web fallback
+- Updated settings.js: exportVault() now uses saveFile() for native save dialog; triggerImportVault() now uses pickFile() for full filesystem browser
+- Added processImportObject() helper to avoid code duplication between native and HTML file input paths
+- Kept HTML file input as fallback for non-Capacitor environments
+- Verified ALL menu items: toggleTheme, showPasswordHealth, showAuditLog, showSecurityInfo, showAutoLockSettings, toggleBiometric, exportVault, triggerImportVault, showCloudSettings, openAddCustomService, lockVault, showAbout
+- Bumped version to 5.3.0
+- Built APK (7.5 MB)
+- Pushed to GitHub, created release v5.3.0 with APK
+
+Stage Summary:
+- Biometric Class 2 fix already in place from v5.2.0
+- File picker now uses native ACTION_OPEN_DOCUMENT/ACTION_CREATE_DOCUMENT instead of limited WebView chooser
+- All 12 settings menu items verified present and functional
+- APK: /home/z/my-project/download/passvault.apk
+- Release: https://github.com/redbleach5/passvault/releases/tag/v5.3.0

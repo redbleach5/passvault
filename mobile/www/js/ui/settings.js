@@ -18,6 +18,12 @@ import {
   cloudUpload, cloudDownload, cloudStatus,
   isCloudConfigured, isCloudAuthenticated
 } from '../cloud.js';
+import {
+  testWebDAVConnection, webdavUpload, webdavDownload,
+  getWebDAVConfig, saveWebDAVConfig, removeWebDAVConfig,
+  isWebDAVConfigured, getCloudProvider, setCloudProvider,
+  WEBDAV_PRESETS
+} from '../webdav.js';
 
 // ===== Export / Import =====
 
@@ -34,6 +40,9 @@ async function exportVault() {
     const auditEnc = localStorage.getItem('pv_audit');
     const format = localStorage.getItem('pv_format') || 'v2';
 
+    const vaultData = await loadVault();
+    const serviceCount = Object.keys(vaultData.credentials || {}).length;
+
     const exportObj = {
       version: 2,
       format: 'passvault-export',
@@ -47,7 +56,113 @@ async function exportVault() {
       auditLog: auditEnc,
       formatVersion: format,
       timestamp: new Date().toISOString(),
-      serviceCount: Object.keys((await loadVault()).credentials || {}).length
+      serviceCount: serviceCount
+    };
+
+    const jsonStr = JSON.stringify(exportObj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const fileName = `passvault-backup-${dateStr}.vault`;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Track last backup time
+    const now = new Date();
+    localStorage.setItem('pv_last_backup_time', now.toISOString());
+
+    // Calculate file size
+    const fileSizeBytes = new Blob([jsonStr]).size;
+    const fileSizeKB = (fileSizeBytes / 1024).toFixed(1);
+    const fileSizeStr = fileSizeKB > 1024 ? (fileSizeKB / 1024).toFixed(1) + ' МБ' : fileSizeKB + ' КБ';
+
+    await auditLog('export', null, `Backup created (${serviceCount} services, ${fileSizeStr})`, 'success');
+    showToast(`Резервная копия сохранена в файл ${fileName}`);
+
+    // Show detailed info modal
+    showBackupInfoModal(fileName, serviceCount, fileSizeStr, now);
+  } catch(e) {
+    await auditLog('export', null, 'Export failed: ' + e.message, 'failure');
+    showToast('Ошибка экспорта');
+  }
+}
+
+function showBackupInfoModal(fileName, serviceCount, fileSizeStr, backupDate) {
+  const body = document.getElementById('backup-info-body');
+  const dateFormatted = backupDate.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  body.innerHTML = `
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="font-size:48px">✅</div>
+      <div style="font-size:16px;font-weight:700;margin-top:8px;color:var(--accent)">Резервная копия создана!</div>
+    </div>
+    <div class="cred-field">
+      <div class="cred-label">📁 Файл</div>
+      <div class="cred-value" style="font-size:13px">${escHtml(fileName)}</div>
+    </div>
+    <div class="cred-field">
+      <div class="cred-label">📂 Расположение</div>
+      <div class="cred-value" style="font-size:13px">Папка «Загрузки» (Downloads)</div>
+    </div>
+    <div class="cred-field">
+      <div class="cred-label">📊 Сервисов в копии</div>
+      <div class="cred-value">${serviceCount}</div>
+    </div>
+    <div class="cred-field">
+      <div class="cred-label">📦 Размер файла</div>
+      <div class="cred-value">${fileSizeStr}</div>
+    </div>
+    <div class="cred-field">
+      <div class="cred-label">📅 Дата создания</div>
+      <div class="cred-value">${dateFormatted}</div>
+    </div>
+    <div class="cred-field" style="border-color:var(--accent);background:var(--accent-light)">
+      <div class="cred-label" style="color:var(--accent)">🔒 Шифрование</div>
+      <div class="cred-value" style="font-size:13px">AES-256-GCM — никто не прочитает файл без мастер-пароля</div>
+    </div>
+    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:12px 16px;margin-top:12px;font-size:13px;color:var(--text-secondary)">
+      💡 <strong>Совет:</strong> Сохраните этот файл в надёжном месте — облако, флешка или другой носитель. Для восстановления используйте «Импорт хранилища».
+    </div>
+  `;
+
+  openModal('modal-backup-info');
+}
+
+/**
+ * Create a silent auto-backup (no UI, just saves the file).
+ * Called on beforeunload / pause events.
+ */
+async function autoBackup() {
+  if (!state.masterKey) return;
+  try {
+    const vaultEnc = localStorage.getItem('pv_vault');
+    const customEnc = localStorage.getItem('pv_custom_services');
+    const salt = localStorage.getItem('pv_salt');
+    const hash = localStorage.getItem('pv_hash');
+    const auditEnc = localStorage.getItem('pv_audit');
+    const format = localStorage.getItem('pv_format') || 'v2';
+
+    const vaultData = await loadVault();
+    const serviceCount = Object.keys(vaultData.credentials || {}).length;
+
+    const exportObj = {
+      version: 2,
+      format: 'passvault-export',
+      kdf: 'PBKDF2-SHA256',
+      kdfIterations: PBKDF2_ITERATIONS,
+      cipher: 'AES-256-GCM',
+      salt, hash, vault: vaultEnc,
+      customServices: customEnc,
+      auditLog: auditEnc,
+      formatVersion: format,
+      timestamp: new Date().toISOString(),
+      serviceCount
     };
 
     const jsonStr = JSON.stringify(exportObj, null, 2);
@@ -63,11 +178,33 @@ async function exportVault() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    await auditLog('export', null, `Backup created (${exportObj.serviceCount} services)`, 'success');
-    showToast('Резервная копия сохранена');
+    localStorage.setItem('pv_last_backup_time', new Date().toISOString());
   } catch(e) {
-    await auditLog('export', null, 'Export failed: ' + e.message, 'failure');
-    showToast('Ошибка экспорта');
+    // Silent fail for auto-backup
+  }
+}
+
+/**
+ * Format the last backup time for display in settings.
+ */
+function getLastBackupTimeText() {
+  const iso = localStorage.getItem('pv_last_backup_time');
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return 'только что';
+    if (diffMin < 60) return `${diffMin} мин назад`;
+    if (diffHr < 24) return `${diffHr} ч назад`;
+    if (diffDay < 7) return `${diffDay} дн назад`;
+    return d.toLocaleDateString('ru-RU');
+  } catch(e) {
+    return '';
   }
 }
 
@@ -245,7 +382,7 @@ function showSecurityInfo() {
     '<div class="cred-field"><div class="cred-label">Защита от брутфорса</div><div class="cred-value">5 попыток, затем блокировка 15 мин</div></div>' +
     '<div class="cred-field"><div class="cred-label">Очистка буфера</div><div class="cred-value">Через 30 секунд после копирования</div></div>' +
     '<div class="cred-field"><div class="cred-label">Сравнение хэшей</div><div class="cred-value">Constant-time (защита от timing-атак)</div></div>' +
-    '<div class="cred-field"><div class="cred-label">Данные</div><div class="cred-value">Локально на устройстве + облако (опционально)</div></div>' +
+    '<div class="cred-field"><div class="cred-label">Данные</div><div class="cred-value">Локально на устройстве + облако (WebDAV / Firebase)</div></div>' +
     '<div class="cred-field"><div class="cred-label">CSP</div><div class="cred-value">Content-Security-Policy включена</div></div>' +
   '</div>';
   openModal('modal-security');
@@ -510,93 +647,175 @@ function saveAutoLockSettings() {
 
 function showCloudSettings() {
   const body = document.getElementById('cloud-settings-body');
-  const config = getFirebaseConfig();
-  const configured = !!(config && config.apiKey);
+  const currentProvider = getCloudProvider();
+  const webdavConfig = getWebDAVConfig();
+  const firebaseConfig = getFirebaseConfig();
+  const firebaseConfigured = !!(firebaseConfig && firebaseConfig.apiKey);
 
   body.innerHTML = `
     <div style="text-align:center;padding:8px 0 16px">
       <div style="font-size:40px">☁️</div>
-      <div style="font-size:16px;font-weight:700;margin-top:4px">Облачная синхронизация</div>
+      <div style="font-size:16px;font-weight:700;margin-top:4px">Синхронизация и бэкап</div>
       <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Данные шифруются перед отправкой. Сервер не видит пароли.</div>
     </div>
 
-    <div class="form-group">
-      <label>Firebase API Key</label>
-      <input type="text" id="fb-apiKey" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="AIzaSy..." value="${escHtml(config?.apiKey || '')}">
-    </div>
-    <div class="form-group">
-      <label>Firebase Auth Domain</label>
-      <input type="text" id="fb-authDomain" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.firebaseapp.com" value="${escHtml(config?.authDomain || '')}">
-    </div>
-    <div class="form-group">
-      <label>Firebase Project ID</label>
-      <input type="text" id="fb-projectId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project-id" value="${escHtml(config?.projectId || '')}">
-    </div>
-    <div class="form-group">
-      <label>Storage Bucket (необязательно)</label>
-      <input type="text" id="fb-storageBucket" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.appspot.com" value="${escHtml(config?.storageBucket || '')}">
-    </div>
-    <div class="form-group">
-      <label>Messaging Sender ID (необязательно)</label>
-      <input type="text" id="fb-messagingSenderId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="123456789" value="${escHtml(config?.messagingSenderId || '')}">
-    </div>
-    <div class="form-group">
-      <label>App ID (необязательно)</label>
-      <input type="text" id="fb-appId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="1:123:web:abc" value="${escHtml(config?.appId || '')}">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px">Выберите облачный сервис</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <div class="svc-card" style="cursor:pointer;border-color:${currentProvider === 'webdav' ? 'var(--accent)' : 'var(--border)'}" onclick="selectCloudProvider('webdav')">
+        <div class="svc-icon" style="font-size:24px;width:40px;height:40px;background:var(--accent-light)">🔗</div>
+        <div class="svc-info">
+          <div class="svc-name">WebDAV <span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--accent-light);color:var(--accent);font-weight:600;margin-left:4px">Рекомендуется</span></div>
+          <div class="svc-detail">Бесплатно — Яндекс.Диск, Nextcloud, ownCloud</div>
+        </div>
+        <div style="font-size:18px;color:${currentProvider === 'webdav' ? 'var(--accent)' : 'var(--text-muted)'}">${currentProvider === 'webdav' ? '●' : '○'}</div>
+      </div>
+      <div class="svc-card" style="cursor:pointer;border-color:${currentProvider === 'firebase' ? 'var(--accent)' : 'var(--border)'}" onclick="selectCloudProvider('firebase')">
+        <div class="svc-icon" style="font-size:24px;width:40px;height:40px;background:var(--bg-tertiary)">🔥</div>
+        <div class="svc-info">
+          <div class="svc-name">Firebase <span style="font-size:10px;padding:2px 6px;border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-weight:600;margin-left:4px">Продвинутый</span></div>
+          <div class="svc-detail">Для разработчиков — требуется настройка</div>
+        </div>
+        <div style="font-size:18px;color:${currentProvider === 'firebase' ? 'var(--accent)' : 'var(--text-muted)'}">${currentProvider === 'firebase' ? '●' : '○'}</div>
+      </div>
     </div>
 
-    <button class="btn btn-primary" onclick="saveCloudConfig()" style="margin-bottom:12px">💾 Сохранить конфигурацию</button>
-
-    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Аккаунт</div>
-      <div id="cloud-auth-status" style="margin-bottom:12px">
-        ${isCloudAuthenticated() ? '<div style="color:var(--accent);font-size:13px">✓ Авторизован</div>' : '<div style="color:var(--text-muted);font-size:13px">Не авторизован</div>'}
-      </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="cloud-email" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="user@example.com">
-      </div>
-      <div class="form-group">
-        <label>Пароль</label>
-        <input type="password" id="cloud-password" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Пароль облака (минимум 6 символов)">
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudRegister()">Регистрация</button>
-        <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudLogin()">Войти</button>
-      </div>
-      ${isCloudAuthenticated() ? '<button class="btn btn-outline btn-sm" style="width:100%;margin-top:8px" onclick="doCloudLogout()">🚪 Выйти из облака</button>' : ''}
-    </div>
-
-    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:12px">Синхронизация</div>
-      <div id="cloud-sync-status" style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">Загрузка статуса...</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudUpload()">⬆️ Загрузить в облако</button>
-        <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudDownload()">⬇️ Скачать из облака</button>
-      </div>
-    </div>
+    <div id="cloud-provider-content"></div>
   `;
 
-  openModal('modal-cloud-settings');
+  // Render the selected provider's content
+  renderCloudProviderContent(currentProvider);
 
-  // Load cloud status
-  if (isCloudConfigured() && isCloudAuthenticated()) {
-    cloudStatus().then(status => {
-      const el = document.getElementById('cloud-sync-status');
-      if (el) {
-        if (status.hasCloudData) {
-          el.innerHTML = `<span style="color:var(--accent)">✓ Облачная копия существует</span><br>Последняя синхронизация: ${escHtml(status.lastSyncAt || 'Неизвестно')}`;
-        } else {
-          el.innerHTML = '<span style="color:var(--warning)">Облачная копия не найдена</span>';
-        }
-      }
-    }).catch(() => {
-      const el = document.getElementById('cloud-sync-status');
-      if (el) el.textContent = 'Не удалось подключиться к облаку';
-    });
-  } else {
-    const el = document.getElementById('cloud-sync-status');
-    if (el) el.textContent = 'Настройте Firebase и авторизуйтесь';
+  openModal('modal-cloud-settings');
+}
+
+function renderCloudProviderContent(provider) {
+  const container = document.getElementById('cloud-provider-content');
+  if (!container) return;
+
+  if (provider === 'webdav') {
+    const config = getWebDAVConfig() || {};
+    const configured = isWebDAVConfigured();
+
+    container.innerHTML = `
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">🔗 Настройка WebDAV</div>
+
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Поддерживаемые сервисы: Яндекс.Диск, Nextcloud, ownCloud, Box, Koofr, Synology и любые WebDAV-серверы.
+        </div>
+
+        <div style="margin-bottom:12px">
+          <label style="display:block;font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Быстрый выбор сервиса</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${WEBDAV_PRESETS.map(p => `
+              <button class="btn btn-outline btn-sm" style="font-size:12px;padding:6px 10px" onclick="fillWebdavPreset('${p.id}')">${p.icon} ${p.name}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>URL сервера</label>
+          <input type="url" id="wd-url" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="https://webdav.yandex.ru/" value="${escHtml(config.url || '')}">
+        </div>
+        <div class="form-group">
+          <label>Имя пользователя</label>
+          <input type="text" id="wd-username" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="user@example.com" value="${escHtml(config.username || '')}">
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="wd-password" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="Пароль или токен приложения" value="${escHtml(config.password || '')}">
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-outline btn-sm" style="flex:1" onclick="doWebdavTest()">🔍 Проверить</button>
+          <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveWebdavConfig()">💾 Сохранить</button>
+        </div>
+
+        ${configured ? `
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
+            <div style="font-size:14px;font-weight:700;margin-bottom:12px">Синхронизация</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <button class="btn btn-primary btn-sm" style="flex:1" onclick="doWebdavUpload()">⬆️ Загрузить</button>
+              <button class="btn btn-outline btn-sm" style="flex:1" onclick="doWebdavDownload()">⬇️ Скачать</button>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+              Файл: passvault-sync.vault (зашифрован AES-256-GCM)
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } else if (provider === 'firebase') {
+    const config = getFirebaseConfig() || {};
+    const configured = !!(config && config.apiKey);
+
+    container.innerHTML = `
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">🔥 Настройка Firebase</div>
+
+        <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text-secondary)">
+          ⚠️ Firebase требует создания проекта в Google Cloud. Для Firestore нужен план Blaze (платный).
+        </div>
+
+        <div class="form-group">
+          <label>Firebase API Key</label>
+          <input type="text" id="fb-apiKey" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="AIzaSy..." value="${escHtml(config?.apiKey || '')}">
+        </div>
+        <div class="form-group">
+          <label>Firebase Auth Domain</label>
+          <input type="text" id="fb-authDomain" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.firebaseapp.com" value="${escHtml(config?.authDomain || '')}">
+        </div>
+        <div class="form-group">
+          <label>Firebase Project ID</label>
+          <input type="text" id="fb-projectId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project-id" value="${escHtml(config?.projectId || '')}">
+        </div>
+        <div class="form-group">
+          <label>Storage Bucket (необязательно)</label>
+          <input type="text" id="fb-storageBucket" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="my-project.appspot.com" value="${escHtml(config?.storageBucket || '')}">
+        </div>
+        <div class="form-group">
+          <label>Messaging Sender ID (необязательно)</label>
+          <input type="text" id="fb-messagingSenderId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="123456789" value="${escHtml(config?.messagingSenderId || '')}">
+        </div>
+        <div class="form-group">
+          <label>App ID (необязательно)</label>
+          <input type="text" id="fb-appId" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;outline:none" placeholder="1:123:web:abc" value="${escHtml(config?.appId || '')}">
+        </div>
+
+        <button class="btn btn-primary" onclick="saveCloudConfig()" style="margin-bottom:12px">💾 Сохранить конфигурацию</button>
+
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:12px">Аккаунт</div>
+          <div id="cloud-auth-status" style="margin-bottom:12px">
+            ${isCloudAuthenticated() ? '<div style="color:var(--accent);font-size:13px">✓ Авторизован</div>' : '<div style="color:var(--text-muted);font-size:13px">Не авторизован</div>'}
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="cloud-email" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>Пароль</label>
+            <input type="password" id="cloud-password" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Пароль облака (минимум 6 символов)">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudRegister()">Регистрация</button>
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudLogin()">Войти</button>
+          </div>
+          ${isCloudAuthenticated() ? '<button class="btn btn-outline btn-sm" style="width:100%;margin-top:8px" onclick="doCloudLogout()">🚪 Выйти из облака</button>' : ''}
+        </div>
+
+        ${configured && isCloudAuthenticated() ? `
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:12px">Синхронизация</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="doCloudUpload()">⬆️ Загрузить</button>
+            <button class="btn btn-outline btn-sm" style="flex:1" onclick="doCloudDownload()">⬇️ Скачать</button>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+    `;
   }
 }
 
@@ -680,8 +899,221 @@ async function doCloudDownloadFn() {
   });
 }
 
+// ===== WebDAV Cloud Sync =====
+
+function selectCloudProviderFn(provider) {
+  setCloudProvider(provider);
+  showCloudSettings(); // Re-render the modal
+}
+
+function fillWebdavPresetFn(presetId) {
+  const preset = WEBDAV_PRESETS.find(p => p.id === presetId);
+  if (!preset) return;
+  const urlInput = document.getElementById('wd-url');
+  if (urlInput && preset.url) {
+    urlInput.value = preset.url;
+  } else if (urlInput && preset.placeholder) {
+    urlInput.placeholder = preset.placeholder;
+    urlInput.value = '';
+  }
+  urlInput?.focus();
+}
+
+async function doWebdavTestFn() {
+  const url = document.getElementById('wd-url')?.value.trim();
+  const username = document.getElementById('wd-username')?.value.trim();
+  const password = document.getElementById('wd-password')?.value;
+  showToast('Проверка подключения...');
+  const result = await testWebDAVConnection(url, username, password);
+  if (result.success) {
+    showToast('✓ Подключение успешно!');
+  } else {
+    showToast(result.error || 'Ошибка подключения');
+  }
+}
+
+async function saveWebdavConfigFn() {
+  const url = document.getElementById('wd-url')?.value.trim();
+  const username = document.getElementById('wd-username')?.value.trim();
+  const password = document.getElementById('wd-password')?.value;
+
+  if (!url || !username || !password) {
+    showToast('Заполните все поля');
+    return;
+  }
+
+  saveWebDAVConfig({ url, username, password });
+  showToast('Конфигурация WebDAV сохранена');
+  auditLog('webdav_config', null, null, 'success');
+  showCloudSettings(); // Refresh to show sync buttons
+}
+
+async function doWebdavUploadFn() {
+  if (!state.masterKey) { showToast('Сначала разблокируйте хранилище'); return; }
+  const config = getWebDAVConfig();
+  if (!config) { showToast('Настройте WebDAV'); return; }
+
+  showToast('Загрузка в облако...');
+
+  try {
+    // Build the same export data structure
+    const vaultEnc = localStorage.getItem('pv_vault');
+    const customEnc = localStorage.getItem('pv_custom_services');
+    const salt = localStorage.getItem('pv_salt');
+    const hash = localStorage.getItem('pv_hash');
+    const auditEnc = localStorage.getItem('pv_audit');
+    const format = localStorage.getItem('pv_format') || 'v2';
+    const vaultData = await loadVault();
+    const serviceCount = Object.keys(vaultData.credentials || {}).length;
+
+    const syncObj = {
+      version: 2,
+      format: 'passvault-export',
+      kdf: 'PBKDF2-SHA256',
+      kdfIterations: PBKDF2_ITERATIONS,
+      cipher: 'AES-256-GCM',
+      salt, hash, vault: vaultEnc,
+      customServices: customEnc,
+      auditLog: auditEnc,
+      formatVersion: format,
+      timestamp: new Date().toISOString(),
+      serviceCount
+    };
+
+    const data = JSON.stringify(syncObj);
+    const result = await webdavUpload(config.url, config.username, config.password, data);
+    if (result.success) {
+      showToast('✓ Данные загружены в WebDAV');
+      auditLog('webdav_upload', null, serviceCount + ' services', 'success');
+    } else {
+      showToast(result.error || 'Ошибка загрузки');
+    }
+  } catch(e) {
+    showToast('Ошибка: ' + (e.message || e));
+  }
+}
+
+async function doWebdavDownloadFn() {
+  const config = getWebDAVConfig();
+  if (!config) { showToast('Настройте WebDAV'); return; }
+
+  showConfirm('Скачать из WebDAV?', 'Локальные данные будут заменены данными из облака. Продолжить?', 'Скачать', async () => {
+    showToast('Скачивание из облака...');
+    const result = await webdavDownload(config.url, config.username, config.password);
+    if (result.success && result.data) {
+      try {
+        const importObj = JSON.parse(result.data);
+        if (!importObj.format || importObj.format !== 'passvault-export') {
+          showToast('Файл на сервере не является копией PassVault');
+          return;
+        }
+        // Apply the import
+        if (importObj.salt) localStorage.setItem('pv_salt', importObj.salt);
+        if (importObj.hash) localStorage.setItem('pv_hash', importObj.hash);
+        if (importObj.vault) localStorage.setItem('pv_vault', importObj.vault);
+        if (importObj.customServices) localStorage.setItem('pv_custom_services', importObj.customServices);
+        if (importObj.auditLog) localStorage.setItem('pv_audit', importObj.auditLog);
+        if (importObj.formatVersion) localStorage.setItem('pv_format', importObj.formatVersion);
+
+        auditLog('webdav_download', null, 'Downloaded from WebDAV', 'success');
+        showToast('✓ Данные скачаны. Разблокируйте хранилище.');
+        lockVault();
+      } catch(e) {
+        showToast('Ошибка обработки данных');
+      }
+    } else {
+      showToast(result.error || 'Ошибка скачивания');
+    }
+  });
+}
+
+// ===== Biometric Toggle =====
+
+async function toggleBiometric() {
+  const { isBiometricAvailable, isBiometricEnabled, enableBiometricUnlock, disableBiometricUnlock } = await import('../biometric.js');
+
+  const available = await isBiometricAvailable();
+  if (!available.available) {
+    showToast('Биометрия недоступна на этом устройстве');
+    return;
+  }
+
+  const enabled = await isBiometricEnabled();
+
+  if (enabled) {
+    // Disable biometric
+    showConfirm('Отключить вход по отпечатку?', 'Вам придётся вводить мастер-пароль каждый раз.', 'Отключить', async () => {
+      const result = await disableBiometricUnlock();
+      if (result.success) {
+        showToast('Вход по отпечатку отключён');
+        const { initBiometricUI } = await import('../biometric.js');
+        initBiometricUI();
+      } else {
+        showToast('Ошибка отключения');
+      }
+    });
+  } else {
+    // Enable biometric — need master password
+    if (!state.masterKey) {
+      showToast('Сначала разблокируйте хранилище');
+      return;
+    }
+
+    const body = document.getElementById('biometric-setup-body');
+    body.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:48px">👆</div>
+        <div style="font-size:16px;font-weight:700;margin-top:8px">Настройка входа по отпечатку</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:8px">
+          Введите мастер-пароль для настройки биометрического входа.
+          Ваш пароль будет сохранён в защищённом хранилище устройства.
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Мастер-пароль</label>
+        <div class="input-wrapper">
+          <input type="password" id="bio-setup-pw" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Введите мастер-пароль" onkeydown="if(event.key==='Enter')confirmBiometricSetup()">
+          <button class="toggle-vis" onclick="toggleVis('bio-setup-pw')">👁️</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="confirmBiometricSetup()">👆 Настроить</button>
+    `;
+    openModal('modal-biometric-setup');
+  }
+}
+
+async function confirmBiometricSetupFn() {
+  const pw = document.getElementById('bio-setup-pw')?.value;
+  if (!pw) { showToast('Введите пароль'); return; }
+
+  // Verify password
+  const { deriveKeyAndHash, constantTimeEqual } = await import('../crypto.js');
+  const salt = localStorage.getItem('pv_salt');
+  const storedHash = localStorage.getItem('pv_hash');
+  if (!salt || !storedHash) { showToast('Ошибка'); return; }
+
+  const { hash } = await deriveKeyAndHash(pw, salt);
+  if (!constantTimeEqual(hash, storedHash)) {
+    showToast('Неверный пароль');
+    return;
+  }
+
+  // Password is correct, enable biometric
+  const { enableBiometricUnlock, initBiometricUI } = await import('../biometric.js');
+  const result = await enableBiometricUnlock(pw);
+  if (result.success) {
+    closeModal('modal-biometric-setup');
+    showToast('Вход по отпечатку настроен!');
+    initBiometricUI();
+  } else {
+    showToast(result.error || 'Ошибка настройки');
+  }
+}
+
 // Make globally available for onclick handlers
 window.exportVault = exportVault;
+window.autoBackup = autoBackup;
+window.getLastBackupTimeText = getLastBackupTimeText;
 window.triggerImportVault = triggerImportVault;
 window.handleImportFile = handleImportFile;
 window.openAddCustomService = openAddCustomService;
@@ -700,9 +1132,18 @@ window.doCloudDownload = doCloudDownloadFn;
 window.showPasswordHealth = showPasswordHealth;
 window.showAutoLockSettings = showAutoLockSettings;
 window.saveAutoLockSettings = saveAutoLockSettings;
+window.selectCloudProvider = selectCloudProviderFn;
+window.fillWebdavPreset = fillWebdavPresetFn;
+window.doWebdavTest = doWebdavTestFn;
+window.saveWebdavConfig = saveWebdavConfigFn;
+window.doWebdavUpload = doWebdavUploadFn;
+window.doWebdavDownload = doWebdavDownloadFn;
+window.toggleBiometric = toggleBiometric;
+window.confirmBiometricSetup = confirmBiometricSetupFn;
 
 export {
-  exportVault, triggerImportVault, handleImportFile, doImportVault,
+  exportVault, autoBackup, getLastBackupTimeText,
+  triggerImportVault, handleImportFile, doImportVault,
   openAddCustomService, saveCustomService,
   showAuditLog, showSecurityInfo, showAbout, showCloudSettings,
   showPasswordHealth, showAutoLockSettings

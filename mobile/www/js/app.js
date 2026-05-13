@@ -12,6 +12,8 @@ import { renderDashboard, saveVault } from './ui/vault.js';
 import { generatePassword } from './ui/generator.js';
 // Import settings module to register all onclick handlers on window
 import './ui/settings.js';
+// Import biometric module to register biometric functions on window
+import { biometricUnlock, initBiometricUI } from './biometric.js';
 
 // ===== Setup =====
 
@@ -95,6 +97,10 @@ async function doUnlock() {
   }
   const pw = document.getElementById('unlock-pw').value;
   if (!pw) return;
+  await unlockWithPassword(pw);
+}
+
+async function unlockWithPassword(pw) {
   const salt = localStorage.getItem('pv_salt');
   const storedHash = localStorage.getItem('pv_hash');
 
@@ -147,6 +153,9 @@ async function doUnlock() {
       startAutoLock();
       auditLog('unlock', null, null, 'success');
       enterApp();
+
+      // Update biometric UI after entering app
+      initBiometricUI();
     } else {
       state.failedAttempts++;
       localStorage.setItem('pv_failed_attempts', String(state.failedAttempts));
@@ -178,6 +187,24 @@ async function doUnlock() {
   }
 }
 
+// ===== Biometric Unlock =====
+
+async function doBiometricUnlock() {
+  try {
+    const result = await biometricUnlock();
+    if (result.success && result.password) {
+      // Use the retrieved password to unlock
+      await unlockWithPassword(result.password);
+    } else {
+      if (result.error) {
+        showToast('Ошибка биометрии: ' + result.error);
+      }
+    }
+  } catch(e) {
+    showToast('Ошибка биометрической аутентификации');
+  }
+}
+
 // ===== Init =====
 
 async function init() {
@@ -193,6 +220,8 @@ async function init() {
   const hash = localStorage.getItem('pv_hash');
   if (hash) {
     showScreen('screen-unlock');
+    // Initialize biometric UI (show fingerprint button if available)
+    initBiometricUI();
   } else {
     showScreen('screen-setup');
   }
@@ -200,13 +229,26 @@ async function init() {
 
 // ===== Global event handlers =====
 
-// Sync to secure storage before page unload
-window.addEventListener('beforeunload', syncToSecureStorage);
-document.addEventListener('pause', syncToSecureStorage);
+// Sync to secure storage and auto-backup before page unload
+window.addEventListener('beforeunload', () => {
+  syncToSecureStorage();
+  // Auto-backup on close
+  if (state.masterKey) {
+    import('./ui/settings.js').then(({ autoBackup }) => autoBackup()).catch(() => {});
+  }
+});
+document.addEventListener('pause', () => {
+  syncToSecureStorage();
+  // Auto-backup when app goes to background (Capacitor)
+  if (state.masterKey) {
+    import('./ui/settings.js').then(({ autoBackup }) => autoBackup()).catch(() => {});
+  }
+});
 
 // Make functions globally available for onclick handlers
 window.doSetup = doSetup;
 window.doUnlock = doUnlock;
+window.doBiometricUnlock = doBiometricUnlock;
 window.closeConfirm = closeConfirm;
 window.confirmAction = confirmAction;
 window.switchTab = switchTab;

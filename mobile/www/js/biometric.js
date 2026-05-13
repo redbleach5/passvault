@@ -53,7 +53,8 @@ async function isBiometricEnabled() {
 
 /**
  * Enable biometric unlock — stores the master password in secure storage.
- * Requires the user to authenticate with biometric first to confirm.
+ * Stores the master password in EncryptedSharedPreferences after
+ * the user has confirmed their identity by entering the master password.
  * @param {string} password — The master password to store
  * @returns {Promise<{success: boolean, error?: string}>}
  */
@@ -63,23 +64,15 @@ async function enableBiometricUnlock(password) {
     return { success: false, error: 'Биометрия недоступна на этом устройстве' };
   }
 
-  // First, verify that biometric is available
+  // Verify that biometric is available
   const avail = await isBiometricAvailable();
   if (!avail.available) {
     return { success: false, error: 'Биометрия недоступна: ' + avail.reason };
   }
 
-  // Ask user to authenticate with biometric to confirm
-  try {
-    const authResult = await plugin.authenticate({ reason: 'Подтвердите настройку входа по отпечатку' });
-    if (!authResult.success) {
-      return { success: false, error: 'Биометрическая аутентификация не пройдена' };
-    }
-  } catch(e) {
-    return { success: false, error: 'Ошибка аутентификации: ' + (e.message || e) };
-  }
-
-  // Store the password
+  // Store the password directly — the user has already verified their identity
+  // by entering the master password in the setup dialog.
+  // No need for a separate biometric confirmation prompt.
   try {
     const result = await plugin.enable({ password });
     if (result.success) {

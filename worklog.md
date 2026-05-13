@@ -152,3 +152,35 @@ Stage Summary:
 - All code is intact and complete
 - APK v5.9.1 built and saved to /home/z/my-project/download/passvault.apk (5.27 MB)
 - APK installation issue was likely due to signing key mismatch with previous version — user must uninstall old app first
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Comprehensive audit and fix of PassVault APK installation failure
+
+Work Log:
+- Cloned GitHub repo as reference source of truth
+- Compared all local files with GitHub — found JS source code identical (only version number differed)
+- Performed comprehensive Android project audit — found 15 issues
+- CRITICAL: targetSdkVersion=36 (preview/unreleased API) — devices refuse to install APKs targeting unreleased SDKs
+- CRITICAL: AGP 8.13.0 (canary/alpha) — may produce malformed APKs
+- CRITICAL: BiometricPlugin had illegal DEVICE_CREDENTIAL + BIOMETRIC_STRONG|WEAK combination causing IllegalArgumentException on Android 11+
+- HIGH: android:allowBackup=true is dangerous for password manager (EncryptedSharedPreferences can be backed up)
+- HIGH: Deprecated READ/WRITE_EXTERNAL_STORAGE permissions (SAF doesn't need them)
+- Fixed all issues:
+  - targetSdkVersion/compileSdkVersion: 36 → 35 (Android 15, stable)
+  - AGP: 8.13.0 → 8.7.3 (stable)
+  - androidx.core: 1.17.0 → 1.15.0 (compatible with compileSdk 35)
+  - BiometricPlugin: proper fallback logic (try biometrics first, then DEVICE_CREDENTIAL only)
+  - AndroidManifest: allowBackup=false, fullBackupContent=false
+  - Removed deprecated storage permissions
+  - versionCode: 11 → 12, version: 6.0.0
+- Successfully built debug and release APKs
+- APK signed and saved to /home/z/my-project/download/passvault.apk (4.0 MB)
+- Pushed to GitHub, created release v6.0.0 with APK
+
+Stage Summary:
+- Root cause of APK installation failure: targetSdkVersion 36 (preview API) + AGP 8.13.0 (unstable)
+- All 3 critical Android issues fixed
+- APK built successfully, 4.0 MB (normal size)
+- GitHub release: https://github.com/redbleach5/passvault/releases/tag/v6.0.0

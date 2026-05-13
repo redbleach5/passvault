@@ -30,7 +30,11 @@ const state = {
 
   // Grace period after vault creation/unlock to prevent immediate lock by visibilitychange
   _vaultUnlockTime: 0,
-  VAULT_LOCK_GRACE_MS: 3000,  // 3 second grace period
+  VAULT_LOCK_GRACE_MS: 30000,  // 30 second grace period (was 3s — too short for Android keyboard close)
+
+  // Flag to prevent auto-lock for the first 30s after vault creation/unlock
+  // Set to true in startAutoLock(), cleared by a 30s timeout
+  _justCreatedVault: false,
 
   // Rate limiting
   failedAttempts: parseInt(localStorage.getItem('pv_failed_attempts') || '0', 10),

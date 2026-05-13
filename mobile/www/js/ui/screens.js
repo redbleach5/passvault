@@ -145,6 +145,8 @@ function lockVault() {
 
 function resetAutoLock() {
   if (!state.masterKey) return;
+  // Don't reset auto-lock timer during vault creation grace period
+  if (state._justCreatedVault) return;
   clearTimeout(state.autoLockTimer);
   state.autoLockTimer = setTimeout(() => { lockVault(); showToast('Хранилище заблокировано (таймаут)'); }, state.AUTO_LOCK_MS || 5 * 60 * 1000);
   // Absolute TTL for master key in memory
@@ -173,7 +175,10 @@ function startAutoLock() {
 
   state.masterKeyCreatedAt = Date.now();
   state._vaultUnlockTime = Date.now(); // Grace period start
+  state._justCreatedVault = true;     // Prevent auto-lock for 30s after vault creation/unlock
   state.masterKeyTtlTimer = null;
+  // Clear the _justCreatedVault flag after 30 seconds
+  setTimeout(() => { state._justCreatedVault = false; }, state.VAULT_LOCK_GRACE_MS || 30000);
   resetAutoLock();
   if (!state._autoLockListenersAdded) {
     state._autoLockListenersAdded = true;
@@ -182,9 +187,14 @@ function startAutoLock() {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && state.masterKey) {
+        // Flag check: don't lock during vault creation/unlock grace period
+        if (state._justCreatedVault) {
+          console.log('Auto-lock skipped (vault just created/unlocked)');
+          return;
+        }
         // Grace period: don't lock immediately after vault creation/unlock
         const elapsed = Date.now() - state._vaultUnlockTime;
-        if (elapsed < (state.VAULT_LOCK_GRACE_MS || 3000)) {
+        if (elapsed < (state.VAULT_LOCK_GRACE_MS || 30000)) {
           console.log('Auto-lock skipped (grace period)');
           return;
         }

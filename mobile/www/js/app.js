@@ -275,10 +275,9 @@ window.addEventListener('beforeunload', () => {
 });
 document.addEventListener('pause', () => {
   syncToSecureStorage();
-  // Auto-backup when app goes to background (Capacitor)
-  if (state.masterKey) {
-    import('./ui/settings.js').then(({ autoBackup }) => autoBackup()).catch(() => {});
-  }
+  // NOTE: autoBackup() removed from pause handler — it triggers a web download
+  // via <a> click which interferes with normal Android app lifecycle.
+  // Auto-backup is still available on beforeunload (web) and manual trigger.
 });
 
 // Make functions globally available for onclick handlers

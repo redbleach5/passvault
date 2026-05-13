@@ -6,6 +6,7 @@ import { state } from '../state.js';
 import { SERVICES, CATEGORIES } from '../services.js';
 import { encrypt, decryptData, generatePasswordString, evaluatePasswordStrength } from '../crypto.js';
 import { auditLog } from '../audit.js';
+import { syncToSecureStorage } from '../storage.js';
 import {
   showScreen, showToast, updateStrengthMeter, catBadge,
   openModal, closeModal, showConfirm,
@@ -44,6 +45,8 @@ async function saveVault(vaultData) {
   const json = JSON.stringify(vaultData);
   const enc = await encrypt(json, state.masterKey);
   localStorage.setItem('pv_vault', enc);
+  // Sync to secure storage immediately on mobile to prevent data loss on resume
+  try { await syncToSecureStorage(); } catch(e) {}
 }
 
 async function loadVault() {
@@ -61,6 +64,8 @@ async function saveCustomServices(svcs) {
   } else {
     localStorage.setItem('pv_custom_services', JSON.stringify(svcs));
   }
+  // Sync to secure storage immediately on mobile to prevent data loss on resume
+  try { await syncToSecureStorage(); } catch(e) {}
 }
 
 async function loadCustomServices() {

@@ -207,3 +207,28 @@ Stage Summary:
 - GitHub Release: https://github.com/redbleach5/passvault/releases/download/v6.0.0/passvault.apk
 - All source files match v6.0.0 on GitHub exactly
 - Signing config added with keystore at mobile/android/passvault-release.keystore
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix SyntaxError in filepicker.js and cascade errors
+
+Work Log:
+- Diagnosed root cause: `*/` inside `'*/*'` in JSDoc comment on line 31 of filepicker.js prematurely closes the comment block
+- This caused the rest of the file to be treated as code, producing SyntaxError: Unexpected token '*'
+- Since app.js imports from filepicker.js, the entire module chain broke → switchTab not defined
+- Fixed filepicker.js: removed `*/*` from JSDoc, replaced with safe text
+- Also fixed pickFile and saveFile JSDoc @param/@returns that had `{...}` inside comments
+- Found and fixed optional chaining (?.) in settings.js (14 occurrences), wizard.js (4), vault.js (3)
+- Replaced config?.prop with (config && config.prop), cred?.prop with (cred && cred.prop)
+- Replaced document.getElementById()?.value with (document.getElementById() || {}).value
+- Discovered Android assets directory (android/app/src/main/assets/public/) was out of sync with www/
+- Copied all updated www/ files to Android assets directory
+- Rebuilt APK with clean build
+- Uploaded to GitHub release v6.0.0
+
+Stage Summary:
+- Root cause: premature */ in JSDoc comment + optional chaining not supported in some WebViews
+- Fixed APK: /home/z/my-project/download/passvault.apk (4.0 MB, signed)
+- GitHub: https://github.com/redbleach5/passvault/releases/download/v6.0.0/passvault.apk
+- Code pushed to main branch with commit v6.0.1

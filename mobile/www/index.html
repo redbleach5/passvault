@@ -1365,7 +1365,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 3.2.1</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 3.3.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1445,7 +1445,7 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 3.2.1</div>
+        <div class="about-version">Версия 3.3.0</div>
         <div class="about-desc">
           PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
@@ -1495,25 +1495,30 @@ select.form-select:focus { border-color: var(--accent); }
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== SECURE STORAGE LAYER (Capacitor SecureStorage for mobile) =====
+// ===== SECURE STORAGE LAYER (@capacitor/preferences for mobile) =====
+// Uses @capacitor/preferences plugin (v8.0.1) instead of the incompatible SecureStoragePlugin.
+// SECURITY: All vault data is AES-256-GCM encrypted before storage. The master key is derived
+// from the user's password via PBKDF2 with 600k iterations. Even though Preferences uses
+// SharedPreferences on Android (not Android Keystore), the encrypted data is safe because
+// an attacker with access to SharedPreferences would still need the user's password to decrypt.
 const IS_CAPACITOR = !!(window.Capacitor && Capacitor.Plugins);
-const SecureStore = IS_CAPACITOR ? Capacitor.Plugins.SecureStoragePlugin || null : null;
+const Preferences = IS_CAPACITOR ? Capacitor.Plugins.Preferences || null : null;
 
-// Abstract storage layer: uses SecureStorage (Android Keystore) on mobile, localStorage on web
+// Abstract storage layer: uses @capacitor/preferences on mobile, localStorage on web
 const SecureStorage = {
   async getItem(key) {
     try {
-      if (IS_CAPACITOR && SecureStore) {
-        const result = await SecureStore.get({ key });
-        return result.value || null;
+      if (IS_CAPACITOR && Preferences) {
+        const result = await Preferences.get({ key });
+        return result.value; // returns null when not found (no throw)
       }
     } catch(e) {}
     return localStorage.getItem(key);
   },
   async setItem(key, value) {
     try {
-      if (IS_CAPACITOR && SecureStore) {
-        await SecureStore.set({ key, value });
+      if (IS_CAPACITOR && Preferences) {
+        await Preferences.set({ key, value });
         return;
       }
     } catch(e) {}
@@ -1521,8 +1526,8 @@ const SecureStorage = {
   },
   async removeItem(key) {
     try {
-      if (IS_CAPACITOR && SecureStore) {
-        await SecureStore.delete({ key });
+      if (IS_CAPACITOR && Preferences) {
+        await Preferences.remove({ key }); // .remove() not .delete()
         return;
       }
     } catch(e) {}
@@ -1538,14 +1543,14 @@ const _origLocalStorageRemove = localStorage.removeItem.bind(localStorage);
 const SENSITIVE_KEYS = ['pv_salt', 'pv_hash', 'pv_vault', 'pv_custom_services', 'pv_audit', 'pv_format', 'pv_failed_attempts', 'pv_lockout_until'];
 
 localStorage.setItem = function(key, value) {
-  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
     SecureStorage.setItem(key, value).catch(() => {});
   }
   _origLocalStorageSet(key, value);
 };
 
 localStorage.getItem = function(key) {
-  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
     // Synchronous fallback for localStorage API - data is pre-loaded at startup
     return _origLocalStorageGet(key);
   }
@@ -1553,15 +1558,15 @@ localStorage.getItem = function(key) {
 };
 
 localStorage.removeItem = function(key) {
-  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && SecureStore) {
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
     SecureStorage.removeItem(key).catch(() => {});
   }
   _origLocalStorageRemove(key);
 };
 
-// Pre-load sensitive data from SecureStorage into memory at startup
+// Pre-load sensitive data from Preferences into localStorage at startup
 async function preLoadSecureData() {
-  if (!IS_CAPACITOR || !SecureStore) return;
+  if (!IS_CAPACITOR || !Preferences) return;
   for (const key of SENSITIVE_KEYS) {
     try {
       const value = await SecureStorage.getItem(key);
@@ -1572,9 +1577,9 @@ async function preLoadSecureData() {
   }
 }
 
-// Sync data back to SecureStorage (called before app close)
+// Sync data back to Preferences (called before app close)
 async function syncToSecureStorage() {
-  if (!IS_CAPACITOR || !SecureStore) return;
+  if (!IS_CAPACITOR || !Preferences) return;
   for (const key of SENSITIVE_KEYS) {
     try {
       const value = _origLocalStorageGet(key);
@@ -1587,8 +1592,9 @@ async function syncToSecureStorage() {
   }
 }
 
-// Pre-load secure data on startup
-preLoadSecureData();
+// NOTE: preLoadSecureData() is NOT called here at the top level.
+// It is awaited inside init() to ensure data is loaded BEFORE vault state is checked.
+// Calling it here would race with init() and cause mobile users to see the setup screen.
 
 // Sync to secure storage before page unload
 window.addEventListener('beforeunload', syncToSecureStorage);

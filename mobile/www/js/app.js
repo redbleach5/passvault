@@ -275,6 +275,7 @@ document.addEventListener('pause', () => {
 });
 
 // Make functions globally available for onclick handlers
+// Override inline fallback functions with full module versions
 window.checkSetupMatch = checkSetupMatch;
 window.doSetup = doSetup;
 window.doUnlock = doUnlock;
@@ -287,6 +288,7 @@ window.renderDashboard = renderDashboard;
 window.toggleTheme = toggleTheme;
 window.toggleVis = toggleVis;
 window.closeModal = closeModal;
+window.enterApp = enterApp;
 window.openAddCredential = async () => {
   const { openAddCredential } = await import('./ui/vault.js');
   openAddCredential();

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://fcmregistrations.googleapis.com https:; font-src 'self'; media-src 'none'; object-src 'none';">
-<!-- PassVault v5.3.1 — Fix setup button, Biometric Class 2, Native file picker -->
+<!-- PassVault v5.4.0 — Fix setup button (inline fallback), Biometric Class 2, Native file picker -->
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -1709,6 +1709,136 @@ select.form-select:focus { border-color: var(--accent); }
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- Inline fallback: setup button logic works even if ES modules fail to load -->
+<script>
+(function(){
+  // Fallback checkSetupMatch — enables "Create Vault" button when passwords match
+  function _checkSetupMatch(){
+    var pw1=document.getElementById('setup-pw1');
+    var pw2=document.getElementById('setup-pw2');
+    var hint=document.getElementById('setup-match');
+    var btn=document.getElementById('setup-btn');
+    if(!pw1||!pw2||!btn)return;
+    // Also update strength meter
+    var fill=document.getElementById('setup-strength-fill');
+    var text=document.getElementById('setup-strength-text');
+    var v1=pw1.value;
+    if(fill&&text){
+      var s=0;
+      if(v1.length>=8)s++;if(v1.length>=12)s++;
+      if(/[a-z]/.test(v1)&&/[A-Z]/.test(v1))s++;
+      if(/[0-9]/.test(v1))s++;
+      if(/[^a-zA-Z0-9]/.test(v1))s++;
+      if(v1.length>=16)s++;
+      if(/^[a-z]+$/.test(v1)||/^[0-9]+$/.test(v1)||/^[A-Z]+$/.test(v1))s=Math.max(s-2,0);
+      s=Math.min(s,4);
+      var w=['0%','25%','50%','75%','100%'];
+      var l=['','Слабый','Средний','Хороший','Отличный'];
+      var c=['','#ef4444','#f59e0b','#22c55e','#06b6d4'];
+      fill.style.width=w[s];fill.style.background=c[s];
+      text.textContent=l[s];text.style.color=c[s];
+    }
+    if(!pw2.value){hint.textContent='';btn.disabled=true;return;}
+    if(pw1.value===pw2.value&&pw1.value.length>=8){
+      hint.textContent='\u2713 Пароли совпадают';hint.className='match-hint ok';btn.disabled=false;
+    }else{
+      hint.textContent=pw1.value!==pw2.value?'\u2717 Пароли не совпадают':'\u2717 Минимум 8 символов';
+      hint.className='match-hint err';btn.disabled=true;
+    }
+  }
+  // Fallback toggleVis
+  function _toggleVis(id){
+    var inp=document.getElementById(id);
+    if(inp)inp.type=inp.type==='password'?'text':'password';
+  }
+  // Fallback doSetup — uses Web Crypto API directly (no module dependency)
+  async function _doSetup(){
+    var btn=document.getElementById('setup-btn');
+    var errEl=document.getElementById('setup-error');
+    var pw=document.getElementById('setup-pw1').value;
+    if(pw.length<8)return;
+    if(!crypto||!crypto.subtle){
+      errEl.textContent='Web Crypto API недоступен';errEl.style.display='block';return;
+    }
+    // If module version is available, prefer it (has full state management)
+    if(window.doSetup&&window.doSetup!==_doSetup){window.doSetup();return;}
+    try{
+      btn.disabled=true;btn.textContent='Создание...';errEl.style.display='none';
+      var salt=crypto.getRandomValues(new Uint8Array(16));
+      var enc=new TextEncoder();
+      var km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);
+      var bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:600000,hash:'SHA-256'},km,512);
+      var keyBits=bits.slice(0,32);var hashBits=bits.slice(32,64);
+      var aesKey=await crypto.subtle.importKey('raw',keyBits,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+      new Uint8Array(bits).fill(0);new Uint8Array(keyBits).fill(0);
+      var hashHex=Array.from(new Uint8Array(hashBits)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
+      var saltHex=Array.from(new Uint8Array(salt)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
+      localStorage.setItem('pv_salt',saltHex);
+      localStorage.setItem('pv_hash',hashHex);
+      localStorage.setItem('pv_format','v2');
+      var iv=crypto.getRandomValues(new Uint8Array(12));
+      var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},aesKey,enc.encode('{"credentials":{}}'));
+      var b64=function(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf)))};
+      localStorage.setItem('pv_vault',b64(iv)+':'+b64(ct));
+      // Switch to unlock screen
+      document.getElementById('setup-pw1').value='';
+      document.getElementById('setup-pw2').value='';
+      document.getElementById('screen-setup').classList.remove('active');
+      document.getElementById('screen-unlock').classList.add('active');
+      btn.disabled=false;btn.textContent='Создать хранилище';
+    }catch(e){
+      errEl.textContent='Ошибка: '+e.message;errEl.style.display='block';
+      btn.disabled=false;btn.textContent='Создать хранилище';
+    }
+  }
+  // Fallback doUnlock
+  async function _doUnlock(){
+    if(window.doUnlock&&window.doUnlock!==_doUnlock){window.doUnlock();return;}
+    // Basic fallback: derive key and check hash
+    var pw=document.getElementById('unlock-pw').value;
+    if(!pw)return;
+    var saltHex=localStorage.getItem('pv_salt');
+    var storedHash=localStorage.getItem('pv_hash');
+    if(!saltHex||!storedHash)return;
+    try{
+      var saltBytes=new Uint8Array(saltHex.match(/.{1,2}/g).map(function(b){return parseInt(b,16)}));
+      var enc=new TextEncoder();
+      var km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);
+      var bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:600000,hash:'SHA-256'},km,512);
+      var hashBits=bits.slice(32,64);
+      new Uint8Array(bits).fill(0);
+      var hashHex=Array.from(new Uint8Array(hashBits)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
+      var match=true;
+      if(hashHex.length!==storedHash.length)match=false;
+      else for(var i=0;i<hashHex.length;i++)match=match&&(hashHex.charCodeAt(i)===storedHash.charCodeAt(i));
+      if(match){
+        document.getElementById('unlock-error').style.display='none';
+        document.getElementById('unlock-pw').value='';
+        // Show main app (basic fallback)
+        document.getElementById('screen-unlock').classList.remove('active');
+        document.getElementById('screen-main').classList.add('active');
+        // Try to load full app via dynamic import
+        try{var m=await import('./js/app.js');if(window.enterApp)window.enterApp();}catch(e2){}
+      }else{
+        document.getElementById('unlock-error').style.display='block';
+      }
+    }catch(e){
+      document.getElementById('unlock-error').textContent='Ошибка: '+e.message;
+      document.getElementById('unlock-error').style.display='block';
+    }
+  }
+  // Register on window — modules will override with full versions
+  window.checkSetupMatch=window.checkSetupMatch||_checkSetupMatch;
+  window.doSetup=window.doSetup||_doSetup;
+  window.doUnlock=window.doUnlock||_doUnlock;
+  window.toggleVis=window.toggleVis||_toggleVis;
+  // Register event listeners immediately (don't wait for modules)
+  var pw1=document.getElementById('setup-pw1');
+  var pw2=document.getElementById('setup-pw2');
+  if(pw1)pw1.addEventListener('input',_checkSetupMatch);
+  if(pw2)pw2.addEventListener('input',_checkSetupMatch);
+})();
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

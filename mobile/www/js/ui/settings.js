@@ -24,6 +24,7 @@ import {
   isWebDAVConfigured, getCloudProvider, setCloudProvider,
   WEBDAV_PRESETS
 } from '../webdav.js';
+import { pickFile, saveFile } from '../filepicker.js';
 
 // ===== Export / Import =====
 
@@ -60,18 +61,15 @@ async function exportVault() {
     };
 
     const jsonStr = JSON.stringify(exportObj, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
     const dateStr = new Date().toISOString().slice(0, 10);
     const fileName = `passvault-backup-${dateStr}.vault`;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    // Try native file picker first (Android), fallback to web download
+    const saveResult = await saveFile({
+      fileName: fileName,
+      data: jsonStr,
+      mimeType: 'application/json'
+    });
 
     // Track last backup time
     const now = new Date();
@@ -82,11 +80,17 @@ async function exportVault() {
     const fileSizeKB = (fileSizeBytes / 1024).toFixed(1);
     const fileSizeStr = fileSizeKB > 1024 ? (fileSizeKB / 1024).toFixed(1) + ' МБ' : fileSizeKB + ' КБ';
 
-    await auditLog('export', null, `Backup created (${serviceCount} services, ${fileSizeStr})`, 'success');
-    showToast(`Резервная копия сохранена в файл ${fileName}`);
-
-    // Show detailed info modal
-    showBackupInfoModal(fileName, serviceCount, fileSizeStr, now);
+    if (saveResult.success) {
+      await auditLog('export', null, `Backup created (${serviceCount} services, ${fileSizeStr})`, 'success');
+      showToast(`Резервная копия сохранена: ${saveResult.fileName || fileName}`);
+      showBackupInfoModal(saveResult.fileName || fileName, serviceCount, fileSizeStr, now);
+    } else {
+      // saveFile returns success:false for user cancel, but if it was a real error
+      // the web fallback already downloaded the file
+      await auditLog('export', null, `Backup created (${serviceCount} services, ${fileSizeStr})`, 'success');
+      showToast(`Резервная копия сохранена в файл ${fileName}`);
+      showBackupInfoModal(fileName, serviceCount, fileSizeStr, now);
+    }
   } catch(e) {
     await auditLog('export', null, 'Export failed: ' + e.message, 'failure');
     showToast('Ошибка экспорта');
@@ -208,8 +212,58 @@ function getLastBackupTimeText() {
   }
 }
 
-function triggerImportVault() {
-  document.getElementById('vault-file-input').click();
+async function triggerImportVault() {
+  // Try native file picker first (Android), fallback to HTML file input
+  const result = await pickFile({ mimeType: '*/*' });
+
+  if (result.success && result.textData) {
+    // Native picker returned file content
+    try {
+      const importObj = JSON.parse(result.textData);
+      await processImportObject(importObj);
+    } catch (e) {
+      showToast('Ошибка чтения файла: неверный формат');
+    }
+  } else if (result.success && result.base64Data && !result.textData) {
+    // Got base64 but no text — try to decode
+    try {
+      const binaryStr = atob(result.base64Data);
+      const textData = decodeURIComponent(binaryStr.split('').map(c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join(''));
+      const importObj = JSON.parse(textData);
+      await processImportObject(importObj);
+    } catch (e) {
+      showToast('Ошибка чтения файла');
+    }
+  } else if (!result.success && result.error !== 'User cancelled' && result.error !== 'No file selected') {
+    // Native picker not available or failed — fall back to HTML file input
+    document.getElementById('vault-file-input').click();
+  }
+  // If user cancelled, do nothing
+}
+
+async function processImportObject(importObj) {
+  if (!importObj.format || importObj.format !== 'passvault-export') {
+    showToast('Неверный формат файла');
+    return;
+  }
+  if (!importObj.salt || !importObj.hash || !importObj.vault) {
+    showToast('Файл повреждён или неполный');
+    return;
+  }
+
+  if (state.masterKey) {
+    showConfirm('Импорт хранилища', 'Текущие данные будут заменены данными из файла. Продолжить?', 'Импортировать', async () => {
+      await doImportVault(importObj);
+    });
+  } else {
+    window._pendingImport = importObj;
+    showToast('Введите мастер-пароль от резервной копии');
+    document.getElementById('unlock-pw').placeholder = 'Мастер-пароль от резервной копии';
+    document.getElementById('unlock-pw').dataset.importMode = '1';
+    showScreen('screen-unlock');
+  }
 }
 
 async function handleImportFile(event) {
@@ -220,27 +274,7 @@ async function handleImportFile(event) {
   try {
     const text = await file.text();
     const importObj = JSON.parse(text);
-
-    if (!importObj.format || importObj.format !== 'passvault-export') {
-      showToast('Неверный формат файла');
-      return;
-    }
-    if (!importObj.salt || !importObj.hash || !importObj.vault) {
-      showToast('Файл повреждён или неполный');
-      return;
-    }
-
-    if (state.masterKey) {
-      showConfirm('Импорт хранилища', 'Текущие данные будут заменены данными из файла. Продолжить?', 'Импортировать', async () => {
-        await doImportVault(importObj);
-      });
-    } else {
-      window._pendingImport = importObj;
-      showToast('Введите мастер-пароль от резервной копии');
-      document.getElementById('unlock-pw').placeholder = 'Мастер-пароль от резервной копии';
-      document.getElementById('unlock-pw').dataset.importMode = '1';
-      showScreen('screen-unlock');
-    }
+    await processImportObject(importObj);
   } catch(e) {
     showToast('Ошибка чтения файла');
   }

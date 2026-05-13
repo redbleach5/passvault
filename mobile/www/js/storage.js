@@ -51,7 +51,9 @@ const SENSITIVE_KEYS = [
   'pv_salt', 'pv_hash', 'pv_vault', 'pv_custom_services',
   'pv_audit', 'pv_audit_plain', 'pv_format', 'pv_failed_attempts',
   'pv_lockout_until', 'pv_theme', 'pv_last_backup_time',
-  'pv_cloud_provider', 'pv_webdav_config'
+  'pv_cloud_provider', 'pv_webdav_config',
+  'pv_theme_mode', 'pv_auto_lock_ms', 'pv_master_key_ttl_ms',
+  'pv_firebase_config', 'pv_biometric_enabled'
 ];
 
 localStorage.setItem = function(key, value) {

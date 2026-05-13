@@ -13,8 +13,10 @@
 import { state } from './state.js';
 import { encrypt, decryptData } from './crypto.js';
 import { auditLog } from './audit.js';
-import { showToast, showConfirm } from './ui.js';
-import { loadVault, saveVault, loadCustomServices, saveCustomServices } from './ui/vault.js';
+// Lazy imports for ui.js and ui/vault.js to avoid circular dependency issues:
+// cloud.js -> ui/vault.js -> ui/screens.js -> storage.js
+// and settings.js -> cloud.js -> ui/vault.js (circular via settings)
+// These modules are only needed inside functions, not at module load time.
 
 // ===== Firebase SDK (loaded from CDN) =====
 

@@ -208,22 +208,36 @@ async function doBiometricUnlock() {
 // ===== Init =====
 
 async function init() {
-  initTheme();
-  await preLoadSecureData();
+  try {
+    initTheme();
+    await preLoadSecureData();
 
-  if (!crypto || !crypto.subtle) {
-    document.getElementById('setup-error').textContent = 'Web Crypto API недоступен. Откройте страницу по HTTPS или localhost.';
-    document.getElementById('setup-error').style.display = 'block';
-    document.getElementById('setup-btn').disabled = true;
-  }
+    if (!crypto || !crypto.subtle) {
+      document.getElementById('setup-error').textContent = 'Web Crypto API недоступен. Откройте страницу по HTTPS или localhost.';
+      document.getElementById('setup-error').style.display = 'block';
+      document.getElementById('setup-btn').disabled = true;
+    }
 
-  const hash = localStorage.getItem('pv_hash');
-  if (hash) {
-    showScreen('screen-unlock');
-    // Initialize biometric UI (show fingerprint button if available)
-    initBiometricUI();
-  } else {
-    showScreen('screen-setup');
+    const hash = localStorage.getItem('pv_hash');
+    if (hash) {
+      showScreen('screen-unlock');
+      // Initialize biometric UI (show fingerprint button if available)
+      initBiometricUI();
+    } else {
+      showScreen('screen-setup');
+    }
+  } catch(e) {
+    console.error('PassVault init failed:', e);
+    // Show a visible error message instead of a blank screen
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:#0f172a;color:#f1f5f9;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+    errorDiv.innerHTML = `
+      <div style="font-size:64px;margin-bottom:16px">⚠️</div>
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Ошибка загрузки PassVault</h2>
+      <p style="font-size:14px;color:#94a3b8;margin-bottom:16px;text-align:center;max-width:360px">${(e.message || String(e)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+      <button style="padding:12px 24px;background:#22c55e;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer" onclick="location.reload()">Перезагрузить</button>
+    `;
+    document.body.appendChild(errorDiv);
   }
 }
 

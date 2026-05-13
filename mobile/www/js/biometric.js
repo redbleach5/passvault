@@ -175,7 +175,7 @@ async function initBiometricUI() {
   // Update status text
   const bioStatusText = document.getElementById('biometric-status-text');
   if (bioStatusText) {
-    bioStatusText.textContent = enabled ? 'Включено' : 'Разблокировка по биометрии';
+    bioStatusText.textContent = enabled ? 'Включено' : 'Отпечаток / Face / PIN';
   }
 
   // Update last backup text in settings

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f172a">
 <title>PassVault</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://fcmregistrations.googleapis.com https:; font-src 'self'; media-src 'none'; object-src 'none';">
-<!-- PassVault v5.1.0 — Backup UX, Biometric login, WebDAV sync -->
+<!-- PassVault v5.2.0 — Biometric Class 2 fix, File picker fix -->
 <style>
 :root {
   --bg-primary: #0f172a;
@@ -1357,7 +1357,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="auth-error" id="unlock-error">❌ Неверный пароль</div>
       </div>
       <button class="btn btn-primary" onclick="doUnlock()">Разблокировать</button>
-      <button class="btn btn-outline" id="biometric-unlock-btn" style="display:none;margin-top:8px" onclick="doBiometricUnlock()">👆 Войти по отпечатку</button>
+      <button class="btn btn-outline" id="biometric-unlock-btn" style="display:none;margin-top:8px" onclick="doBiometricUnlock()">👆 Войти по биометрии</button>
     </div>
   </div>
 
@@ -1472,7 +1472,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" id="biometric-settings-item" onclick="toggleBiometric()" style="display:none">
           <div class="settings-item-left">
             <div class="settings-item-icon">👆</div>
-            <div class="settings-item-text"><h3>Вход по отпечатку</h3><p id="biometric-status-text">Разблокировка по биометрии</p></div>
+            <div class="settings-item-text"><h3>Вход по биометрии</h3><p id="biometric-status-text">Отпечаток / Face / PIN</p></div>
           </div>
           <div class="settings-item-right"><button class="toggle-switch" id="biometric-toggle"></button></div>
         </div>
@@ -1526,7 +1526,7 @@ select.form-select:focus { border-color: var(--accent); }
         <div class="settings-item" onclick="showAbout()">
           <div class="settings-item-left">
             <div class="settings-item-icon">ℹ️</div>
-            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.1.0</p></div>
+            <div class="settings-item-text"><h3>О PassVault</h3><p>Версия 5.2.0</p></div>
           </div>
           <div class="settings-item-right">›</div>
         </div>
@@ -1606,7 +1606,7 @@ select.form-select:focus { border-color: var(--accent); }
       <div class="about-content">
         <div class="about-logo">🛡️</div>
         <div class="about-title">PassVault</div>
-        <div class="about-version">Версия 5.1.0</div>
+        <div class="about-version">Версия 5.2.0</div>
         <div class="about-desc">
           PassVault — безопасный менеджер паролей. Все данные хранятся локально на вашем устройстве и защищены AES-256-GCM шифрованием с PBKDF2-SHA256 (600 000 итераций) через Web Crypto API. Ключи non-extractable. Автоблокировка при уходе в фон, авто-очистка ключа через 30 мин. Защита от брутфорса (5 попыток → 15 мин блокировка). Шифрование журнала активности. Буфер обмена очищается через 30 секунд. Мастер-пароль известен только вам. Экспорт/импорт зашифрованных резервных копий (.vault) для переноса между устройствами.
         </div>
@@ -1704,7 +1704,7 @@ select.form-select:focus { border-color: var(--accent); }
 </div>
 
 <!-- HIDDEN FILE INPUT FOR IMPORT -->
-<input type="file" id="vault-file-input" accept=".vault,.passvault" style="display:none" onchange="handleImportFile(event)">
+<input type="file" id="vault-file-input" accept=".vault,.passvault,.json,application/json,*/*" style="display:none" onchange="handleImportFile(event)">
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>

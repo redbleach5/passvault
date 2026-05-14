@@ -347,3 +347,31 @@ Stage Summary:
 - New settings item: "Проверить обновления" 
 - APK: /home/z/my-project/download/passvault.apk (5.1 MB)
 - Release: https://github.com/redbleach5/passvault/releases/tag/v6.1.0
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix updater system - always shows "latest version" and improve diagnostics
+
+Work Log:
+- Read updater.js, found APP_VERSION = '6.2.0' and GitHub latest release = v6.2.0
+- Identified root cause: version comparison was correct (6.2.0 == 6.2.0 = no update), but user couldn't verify the system works
+- Enhanced manualCheckUpdate() to show detailed version info modal even when no update available
+- Added console.log diagnostic logging throughout updater.js
+- Improved downloadUpdate() with Browser plugin / InAppBrowser fallback for Capacitor
+- Added openGitHubReleases() function for direct access to releases page
+- Added showVersionInfoModal() that shows current version vs latest GitHub version + release date
+- Bumped APP_VERSION to 6.3.0 in updater.js
+- Updated build.gradle: versionCode 16, versionName "6.3.0"
+- Updated all version references in index.html to 6.3.0
+- Verified BiometricPlugin.java and FilePickerPlugin.java are correct (no changes needed)
+- Verified CSP allows api.github.com (already present)
+- Built APK (5.27 MB), pushed to GitHub, created release v6.3.0 with APK
+- Verified GitHub API now returns v6.3.0 as latest release
+
+Stage Summary:
+- Updater system now shows detailed version comparison info when user checks for updates
+- When a new version is available on GitHub, the update modal will appear with download button
+- v6.3.0 APK available at /home/z/my-project/download/passvault.apk
+- GitHub release: https://github.com/redbleach5/passvault/releases/tag/v6.3.0
+- Old app (v6.2.0) will now detect v6.3.0 as available update

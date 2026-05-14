@@ -286,3 +286,30 @@ Stage Summary:
 - GitHub: fully up to date (3 commits since v6.0.0)
 - Release: https://github.com/redbleach5/passvault/releases/tag/v6.0.1
 - APK: /home/z/my-project/download/passvault.apk (3.9 MB, signed)
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix biometric login - register BiometricPlugin + FilePickerPlugin in MainActivity, add FLAG_SECURE, create FilePickerPlugin, rebuild APK, push to GitHub
+
+Work Log:
+- Investigated why biometric login was missing
+- Found MainActivity.java was empty (just `public class MainActivity extends BridgeActivity {}`)
+- BiometricPlugin.java existed but was never registered
+- FilePickerPlugin.java was completely missing
+- FLAG_SECURE was not set
+- Created FilePickerPlugin.java with native ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT support
+- Updated MainActivity.java to register both BiometricPlugin and FilePickerPlugin, and add FLAG_SECURE
+- Fixed import: ActivityResult comes from androidx.activity.result, not com.getcapacitor
+- Synced www/ to android/assets/public/
+- Built APK successfully (5.1 MB, includes both plugins verified via dexdump)
+- Pushed to GitHub (commit: d372c14)
+- Created release v6.1.0 with updated APK
+
+Stage Summary:
+- BiometricPlugin and FilePickerPlugin now properly registered in MainActivity
+- FLAG_SECURE (screenshot protection) restored
+- FilePickerPlugin.java created for native Android file picker
+- APK: /home/z/my-project/download/passvault.apk (5.1 MB)
+- Release: https://github.com/redbleach5/passvault/releases/tag/v6.1.0
+- APK Download: https://github.com/redbleach5/passvault/releases/download/v6.1.0/passvault.apk

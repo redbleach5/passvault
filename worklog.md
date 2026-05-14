@@ -313,3 +313,37 @@ Stage Summary:
 - APK: /home/z/my-project/download/passvault.apk (5.1 MB)
 - Release: https://github.com/redbleach5/passvault/releases/tag/v6.1.0
 - APK Download: https://github.com/redbleach5/passvault/releases/download/v6.1.0/passvault.apk
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix version display (5.8.0→6.1.0), add auto-update system via GitHub API
+
+Work Log:
+- Found version hardcoded as "5.8.0" in 2 places in index.html (settings item + about modal)
+- Updated both to "6.1.0" with id attributes for future dynamic updates
+- Created updater.js module with:
+  - compareVersions() — semver comparison
+  - checkForUpdate() — GitHub Releases API check
+  - autoCheckUpdate() — runs once per 24h after app start
+  - manualCheckUpdate() — from settings UI
+  - showUpdateNotification() — modal with download/skip/remind
+  - downloadUpdate() — opens APK download URL in browser
+  - skipThisVersion() — stores skipped version in localStorage
+- Added update modal HTML in index.html
+- Added "Проверить обновления" settings item with 🔄 icon
+- Updated CSP to allow api.github.com connections
+- Updated HTML comment version to 6.1.0
+- Updated build.gradle versionCode 13→14, versionName 6.0.0→6.1.0
+- Connected updater.js import in app.js
+- Added autoCheckUpdate() call in init() with 5s delay
+- Rebuilt APK (5.1 MB)
+- Pushed to GitHub (commit: 9d343a2)
+- Updated release v6.1.0 with new APK and description
+
+Stage Summary:
+- Version display fixed: 5.8.0 → 6.1.0 in settings + about
+- Auto-update system: checks GitHub API every 24h, manual check available
+- New settings item: "Проверить обновления" 
+- APK: /home/z/my-project/download/passvault.apk (5.1 MB)
+- Release: https://github.com/redbleach5/passvault/releases/tag/v6.1.0

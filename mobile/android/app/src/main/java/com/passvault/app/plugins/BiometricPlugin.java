@@ -326,16 +326,16 @@ public class BiometricPlugin extends Plugin {
                 executor, new BiometricPrompt.AuthenticationCallback() {
                 @Override
                 public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                    // Biometric auth succeeded — retrieve the password from EncryptedSharedPreferences
+                    // Biometric auth succeeded — use the already-captured password.
+                    // NOTE: We do NOT re-read from EncryptedSharedPreferences here because
+                    // this callback runs on a background executor thread, and Android Keystore
+                    // operations can fail on some devices when called from non-main threads.
+                    // The password was captured before the prompt was shown, so it's safe to use.
                     try {
-                        // Re-read from EncryptedSharedPreferences to ensure fresh data
-                        SharedPreferences prefs = getEncryptedPrefs();
-                        String pw = prefs.getString(KEY_PASSWORD, null);
-
-                        if (pw != null) {
+                        if (password != null) {
                             JSObject ret = new JSObject();
                             ret.put("success", true);
-                            ret.put("password", pw);
+                            ret.put("password", password);
                             call.resolve(ret);
                         } else {
                             JSObject ret = new JSObject();

@@ -14,6 +14,8 @@ import { generatePassword } from './ui/generator.js';
 import './ui/settings.js';
 // Import biometric module to register biometric functions on window
 import { biometricUnlock, initBiometricUI } from './biometric.js';
+// Import updater module to register update functions on window
+import { APP_VERSION, autoCheckUpdate, manualCheckUpdate } from './updater.js';
 
 // ===== Setup =====
 
@@ -248,6 +250,9 @@ async function init() {
 
     // Re-register input listeners after init (in case DOM wasn't ready earlier)
     setupInputListeners();
+
+    // Check for updates in background (no more than once per 24h)
+    try { setTimeout(() => autoCheckUpdate().catch(() => {}), 5000); } catch(e) {}
   } catch(e) {
     console.error('PassVault init failed:', e);
     // Show a visible error message instead of a blank screen

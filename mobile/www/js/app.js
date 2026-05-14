@@ -15,7 +15,7 @@ import './ui/settings.js';
 // Import biometric module to register biometric functions on window
 import { biometricUnlock, initBiometricUI } from './biometric.js';
 // Import updater module to register update functions on window
-import { APP_VERSION, autoCheckUpdate, manualCheckUpdate } from './updater.js';
+import { APP_VERSION, autoCheckUpdate, manualCheckUpdate, updateVersionDisplay } from './updater.js';
 
 // ===== Setup =====
 
@@ -250,6 +250,9 @@ async function init() {
 
     // Re-register input listeners after init (in case DOM wasn't ready earlier)
     setupInputListeners();
+
+    // Update version display in settings/about from updater module
+    try { updateVersionDisplay(); } catch(e) {}
 
     // Check for updates in background (no more than once per 24h)
     try { setTimeout(() => autoCheckUpdate().catch(() => {}), 5000); } catch(e) {}

@@ -9,12 +9,24 @@ const IS_CAPACITOR = !!(window.Capacitor && Capacitor.Plugins);
 
 /**
  * Get the Biometric plugin instance (Capacitor native only).
+ * In Capacitor 8, custom plugins must be registered on the JS side
+ * via Capacitor.registerPlugin() before they can be used.
  */
+let _biometricPluginInstance = null;
 function getBiometricPlugin() {
   if (!IS_CAPACITOR) return null;
+  if (_biometricPluginInstance) return _biometricPluginInstance;
   try {
-    return Capacitor.Plugins.Biometric || null;
+    // Try direct access first (works if plugin auto-registered)
+    if (Capacitor.Plugins.Biometric) {
+      _biometricPluginInstance = Capacitor.Plugins.Biometric;
+      return _biometricPluginInstance;
+    }
+    // Custom plugins need explicit JS-side registration
+    _biometricPluginInstance = Capacitor.registerPlugin('Biometric');
+    return _biometricPluginInstance;
   } catch(e) {
+    console.warn('[Biometric] Plugin not available:', e);
     return null;
   }
 }

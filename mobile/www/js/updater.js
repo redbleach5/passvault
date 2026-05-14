@@ -12,7 +12,9 @@
  * We check at most once per app launch + once every 24 hours.
  */
 
-const APP_VERSION = '6.1.0';
+import { showToast, openModal, closeModal } from './ui.js';
+
+const APP_VERSION = '6.2.0';
 const GITHUB_REPO = 'redbleach5/passvault';
 const GITHUB_API = 'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -220,4 +222,13 @@ window.downloadUpdate = downloadUpdate;
 window.skipThisVersion = skipThisVersion;
 window.APP_VERSION = APP_VERSION;
 
-export { APP_VERSION, checkForUpdate, autoCheckUpdate, manualCheckUpdate };
+// Update version displays in settings and about
+function updateVersionDisplay() {
+  var versionText = 'Версия ' + APP_VERSION;
+  var settingsEl = document.getElementById('settings-version-text');
+  if (settingsEl) settingsEl.textContent = versionText;
+  var aboutEl = document.getElementById('about-version-text');
+  if (aboutEl) aboutEl.textContent = versionText;
+}
+
+export { APP_VERSION, checkForUpdate, autoCheckUpdate, manualCheckUpdate, updateVersionDisplay };

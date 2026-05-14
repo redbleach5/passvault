@@ -13,12 +13,24 @@ const IS_CAPACITOR = !!(window.Capacitor && Capacitor.Plugins);
 
 /**
  * Get the FilePicker plugin instance (Capacitor native only).
+ * In Capacitor 8, custom plugins must be registered on the JS side
+ * via Capacitor.registerPlugin() before they can be used.
  */
+let _filePickerPluginInstance = null;
 function getFilePickerPlugin() {
   if (!IS_CAPACITOR) return null;
+  if (_filePickerPluginInstance) return _filePickerPluginInstance;
   try {
-    return Capacitor.Plugins.FilePicker || null;
+    // Try direct access first (works if plugin auto-registered)
+    if (Capacitor.Plugins.FilePicker) {
+      _filePickerPluginInstance = Capacitor.Plugins.FilePicker;
+      return _filePickerPluginInstance;
+    }
+    // Custom plugins need explicit JS-side registration
+    _filePickerPluginInstance = Capacitor.registerPlugin('FilePicker');
+    return _filePickerPluginInstance;
   } catch (e) {
+    console.warn('[FilePicker] Plugin not available:', e);
     return null;
   }
 }

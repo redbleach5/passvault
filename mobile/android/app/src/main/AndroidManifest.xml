@@ -4,6 +4,8 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Required for in-app APK update installation (Android 8+) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Storage permissions not needed — SAF (ACTION_OPEN_DOCUMENT/ACTION_CREATE_DOCUMENT) works without them -->
 
     <application

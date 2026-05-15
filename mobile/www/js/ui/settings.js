@@ -25,6 +25,8 @@ import {
   WEBDAV_PRESETS
 } from '../webdav.js';
 import { pickFile, saveFile } from '../filepicker.js';
+import { isGDriveConfigured, getGDriveConfig, testGDriveConnection, gdriveUpload, gdriveDownload } from '../gdrive.js';
+import { isDropboxConfigured, getDropboxConfig, testDropboxConnection, dropboxUpload, dropboxDownload } from '../dropbox.js';
 
 // ===== Export / Import =====
 
@@ -711,6 +713,22 @@ function showCloudSettings() {
           <div class="svc-detail">Для разработчиков — требуется настройка</div>
         </div>
         <div style="font-size:18px;color:${currentProvider === 'firebase' ? 'var(--accent)' : 'var(--text-muted)'}">${currentProvider === 'firebase' ? '●' : '○'}</div>
+      </div>
+      <div class="svc-card" style="cursor:pointer;border-color:${currentProvider === 'gdrive' ? 'var(--accent)' : 'var(--border)'}" onclick="selectCloudProvider('gdrive')">
+        <div class="svc-icon" style="font-size:24px;width:40px;height:40px;background:rgba(66,133,244,0.12)">📁</div>
+        <div class="svc-info">
+          <div class="svc-name">Google Drive</div>
+          <div class="svc-detail">Токен доступа — просто и быстро</div>
+        </div>
+        <div style="font-size:18px;color:${currentProvider === 'gdrive' ? 'var(--accent)' : 'var(--text-muted)'}">${currentProvider === 'gdrive' ? '●' : '○'}</div>
+      </div>
+      <div class="svc-card" style="cursor:pointer;border-color:${currentProvider === 'dropbox' ? 'var(--accent)' : 'var(--border)'}" onclick="selectCloudProvider('dropbox')">
+        <div class="svc-icon" style="font-size:24px;width:40px;height:40px;background:rgba(0,97,255,0.12)">📦</div>
+        <div class="svc-info">
+          <div class="svc-name">Dropbox</div>
+          <div class="svc-detail">Токен доступа — просто и быстро</div>
+        </div>
+        <div style="font-size:18px;color:${currentProvider === 'dropbox' ? 'var(--accent)' : 'var(--text-muted)'}">${currentProvider === 'dropbox' ? '●' : '○'}</div>
       </div>
     </div>
 

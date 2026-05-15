@@ -13,6 +13,7 @@ import {
   maskPassword, escHtml, escAttr, copyToClipboard, toggleVis
 } from '../ui.js';
 import { lockVault, startAutoLock } from './screens.js';
+import { getCachedIcon } from '../icons.js';
 
 // ===== Data helpers =====
 
@@ -148,11 +149,15 @@ async function renderDashboard() {
     document.getElementById('cards-list').innerHTML = filtered.map(svc => {
       const cred = vault.credentials[svc.id];
       const safeId = escHtml(svc.id);
+      const cachedIcon = getCachedIcon(svc.id);
+      const iconHtml = cachedIcon
+        ? `<img src="${cachedIcon}" alt="${escHtml(svc.displayName)}" style="width:32px;height:32px;border-radius:6px;object-fit:contain;" onerror="this.style.display='none';this.parentNode.textContent='${svc.iconEmoji}'">`
+        : svc.iconEmoji;
       if (cred) {
         const strength = evaluatePasswordStrength(cred.password);
         const dotColor = strength.score >= 3 ? '#22c55e' : strength.score === 2 ? '#f59e0b' : '#ef4444';
         return `<div class="svc-card fade-in" data-action="detail" data-svc="${safeId}">
-          <div class="svc-icon">${svc.iconEmoji}</div>
+          <div class="svc-icon">${iconHtml}</div>
           <div class="svc-info">
             <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
             <div class="svc-detail"><span style="color:${dotColor};margin-right:4px;">●</span>${escHtml(cred.username)} \u00b7 ${escHtml(maskPassword(cred.password))}</div>
@@ -161,7 +166,7 @@ async function renderDashboard() {
         </div>`;
       } else {
         return `<div class="svc-card fade-in" data-action="add-for" data-svc="${safeId}">
-          <div class="svc-icon">${svc.iconEmoji}</div>
+          <div class="svc-icon">${iconHtml}</div>
           <div class="svc-info">
             <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
             <div class="svc-detail">Нет учётных данных</div>
@@ -218,7 +223,13 @@ async function openDetail(svcId) {
 
   if (cred) state.credMap.set(svcId, cred);
 
-  document.getElementById('detail-icon').textContent = svc.iconEmoji;
+  const detailCachedIcon = getCachedIcon(svcId);
+  const detailIconEl = document.getElementById('detail-icon');
+  if (detailCachedIcon) {
+    detailIconEl.innerHTML = `<img src="${detailCachedIcon}" alt="${escHtml(svc.displayName)}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;">`;
+  } else {
+    detailIconEl.textContent = svc.iconEmoji;
+  }
   document.getElementById('detail-name').textContent = svc.displayName;
   const cat = CATEGORIES[svc.category] || CATEGORIES.custom;
   document.getElementById('detail-cat').innerHTML = `<span style="color:${cat.color}">${escHtml(cat.name)}</span>`;
@@ -323,15 +334,20 @@ async function openAddCredential() {
       </div>
     </div>
     <div id="svc-picker-list" style="max-height:300px;overflow-y:auto">
-      ${allServices.map(svc => `
+      ${allServices.map(svc => {
+        const pickerIcon = getCachedIcon(svc.id);
+        const pickerIconHtml = pickerIcon
+          ? `<img src="${pickerIcon}" alt="${escHtml(svc.displayName)}" style="width:28px;height:28px;border-radius:4px;object-fit:contain;">`
+          : svc.iconEmoji;
+        return `
         <div class="svc-picker-item" data-name="${escHtml(svc.name.toLowerCase())}" data-action="select-svc" data-svc="${escHtml(svc.id)}">
-          <div class="svc-picker-icon">${svc.iconEmoji}</div>
+          <div class="svc-picker-icon">${pickerIconHtml}</div>
           <div>
             <div class="svc-picker-name">${escHtml(svc.displayName)}</div>
             <div class="svc-picker-cat">${escHtml((CATEGORIES[svc.category]||CATEGORIES.custom).name)}</div>
           </div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
   body.querySelector('#svc-picker-list').onclick = function(e) {
     const item = e.target.closest('[data-action="select-svc"]');
@@ -359,7 +375,7 @@ async function selectServiceForAdd(svcId) {
   const body = document.getElementById('add-cred-body');
   body.innerHTML = `
     <div style="text-align:center;margin-bottom:20px">
-      <div style="font-size:44px;margin-bottom:4px">${svc.iconEmoji}</div>
+      <div style="font-size:44px;margin-bottom:4px">${(() => { const ci = getCachedIcon(svc.id); return ci ? `<img src="${ci}" alt="${escHtml(svc.displayName)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;">` : svc.iconEmoji; })()}</div>
       <div style="font-size:17px;font-weight:800;letter-spacing:-0.2px">${svc.displayName}</div>
     </div>
     <div class="form-group">

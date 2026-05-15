@@ -19,7 +19,7 @@
 
 import { showToast, openModal, closeModal } from './ui.js';
 
-const APP_VERSION = '8.0.0';
+const APP_VERSION = '8.1.0';
 const GITHUB_REPO = 'redbleach5/passvault';
 const GITHUB_API = 'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours

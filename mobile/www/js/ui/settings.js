@@ -102,9 +102,9 @@ function showBackupInfoModal(fileName, serviceCount, fileSizeStr, backupDate) {
   const dateFormatted = backupDate.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   body.innerHTML = `
-    <div style="text-align:center;padding:8px 0 16px">
-      <div style="font-size:48px">✅</div>
-      <div style="font-size:16px;font-weight:700;margin-top:8px;color:var(--accent)">Резервная копия создана!</div>
+    <div style="text-align:center;padding:8px 0 20px">
+      <div style="font-size:52px">✅</div>
+      <div style="font-size:17px;font-weight:800;margin-top:10px;color:var(--accent)">Резервная копия создана!</div>
     </div>
     <div class="cred-field">
       <div class="cred-label">📁 Файл</div>
@@ -126,11 +126,11 @@ function showBackupInfoModal(fileName, serviceCount, fileSizeStr, backupDate) {
       <div class="cred-label">📅 Дата создания</div>
       <div class="cred-value">${dateFormatted}</div>
     </div>
-    <div class="cred-field" style="border-color:var(--accent);background:var(--accent-light)">
+    <div class="cred-field" style="border-color:var(--border-accent);background:var(--accent-light)">
       <div class="cred-label" style="color:var(--accent)">🔒 Шифрование</div>
       <div class="cred-value" style="font-size:13px">AES-256-GCM — никто не прочитает файл без мастер-пароля</div>
     </div>
-    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:12px 16px;margin-top:12px;font-size:13px;color:var(--text-secondary)">
+    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:14px 16px;margin-top:12px;font-size:13px;color:var(--text-secondary);line-height:1.5;border:1px solid var(--border)">
       💡 <strong>Совет:</strong> Сохраните этот файл в надёжном месте — облако, флешка или другой носитель. Для восстановления используйте «Импорт хранилища».
     </div>
   `;
@@ -389,12 +389,12 @@ async function showAuditLog() {
   if (logs.length === 0) {
     body.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Журнал пуст</h3><p>Действия будут отображаться здесь</p></div>';
   } else {
-    body.innerHTML = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Последние ' + logs.length + ' событий (зашифровано)</div>' +
+    body.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700">Последние ' + logs.length + ' событий (зашифровано)</div>' +
       logs.map(log => {
         const d = new Date(log.ts);
         const time = d.toLocaleDateString('ru') + ' ' + d.toLocaleTimeString('ru');
         const label = actionLabels[log.action] || log.action;
-        const resultTag = log.result ? '<span style="font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px;background:' + (log.result === 'success' ? 'rgba(34,197,94,0.15);color:#22c55e' : 'rgba(239,68,68,0.15);color:#ef4444') + '">' + (resultLabels[log.result] || log.result) + '</span>' : '';
+        const resultTag = log.result ? '<span style="font-size:10px;padding:2px 8px;border-radius:8px;margin-left:6px;background:' + (log.result === 'success' ? 'rgba(34,197,94,0.12);color:#22c55e' : 'rgba(239,68,68,0.12);color:#ef4444') + ';font-weight:700;letter-spacing:0.3px">' + (resultLabels[log.result] || log.result) + '</span>' : '';
         return '<div class="cred-field" style="padding:10px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:13px;font-weight:600">' + escHtml(label) + resultTag + '</div><div style="font-size:11px;color:var(--text-muted)">' + time + '</div></div>' + (log.svc ? '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Сервис: ' + escHtml(log.svc) + '</div>' : '') + (log.detail ? '<div style="font-size:12px;color:var(--danger);margin-top:2px">' + escHtml(log.detail) + '</div>' : '') + (log.platform ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">Платформа: ' + escHtml(log.platform) + '</div>' : '') + '</div>';
       }).join('');
   }

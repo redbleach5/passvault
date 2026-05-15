@@ -13,7 +13,7 @@
 
 import { showToast, openModal, closeModal } from './ui.js';
 
-const APP_VERSION = '6.3.0';
+const APP_VERSION = '7.0.0';
 const GITHUB_REPO = 'redbleach5/passvault';
 const GITHUB_API = 'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -169,14 +169,14 @@ function showUpdateNotification(updateInfo) {
   if (!body) return;
 
   body.innerHTML = `
-    <div style="text-align:center;padding:8px 0 16px">
-      <div style="font-size:48px">🚀</div>
-      <div style="font-size:18px;font-weight:700;margin-top:8px">Доступно обновление!</div>
-      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px">
+    <div style="text-align:center;padding:8px 0 20px">
+      <div style="font-size:52px">🚀</div>
+      <div style="font-size:19px;font-weight:800;margin-top:10px">Доступно обновление!</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:10px">
         Версия <strong style="color:var(--accent)">${currentV}</strong> → <strong style="color:var(--accent)">${latestV}</strong>
       </div>
     </div>
-    ${shortNotes ? '<div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.5;max-height:200px;overflow-y:auto">' + shortNotes + '</div>' : ''}
+    ${shortNotes ? '<div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;font-size:13px;color:var(--text-secondary);line-height:1.6;max-height:200px;overflow-y:auto;border:1px solid var(--border)">' + shortNotes + '</div>' : ''}
     <div style="display:flex;gap:8px;flex-direction:column">
       <button class="btn btn-primary" onclick="downloadUpdate()" style="width:100%">⬇️ Скачать и обновить</button>
       <button class="btn btn-outline" onclick="skipThisVersion('${latestV}')" style="width:100%">Пропустить это обновление</button>
@@ -302,23 +302,23 @@ function showVersionInfoModal(result) {
   if (!body) return;
 
   body.innerHTML = `
-    <div style="text-align:center;padding:8px 0 16px">
-      <div style="font-size:48px">✅</div>
-      <div style="font-size:18px;font-weight:700;margin-top:8px">Обновлений нет</div>
-      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px">
+    <div style="text-align:center;padding:8px 0 20px">
+      <div style="font-size:52px">✅</div>
+      <div style="font-size:19px;font-weight:800;margin-top:10px">Обновлений нет</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:10px">
         Установлена последняя версия
       </div>
     </div>
-    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:16px;margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:10px">
-        <span style="color:var(--text-secondary);font-size:13px">Ваша версия</span>
-        <span style="font-weight:700;color:var(--accent)">${currentV}</span>
+    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:18px;margin-bottom:18px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <span style="color:var(--text-secondary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Ваша версия</span>
+        <span style="font-weight:800;color:var(--accent)">${currentV}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:10px">
-        <span style="color:var(--text-secondary);font-size:13px">Последняя на GitHub</span>
-        <span style="font-weight:700">${latestV}</span>
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <span style="color:var(--text-secondary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Последняя на GitHub</span>
+        <span style="font-weight:800">${latestV}</span>
       </div>
-      ${dateStr ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary);font-size:13px">Дата релиза</span><span style="font-size:13px">' + dateStr + '</span></div>' : ''}
+      ${dateStr ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Дата релиза</span><span style="font-size:13px">' + dateStr + '</span></div>' : ''}
     </div>
     <div style="display:flex;gap:8px;flex-direction:column">
       <button class="btn btn-outline" onclick="openGitHubReleases()" style="width:100%">📂 Открыть страницу релизов</button>

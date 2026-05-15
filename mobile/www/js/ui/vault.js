@@ -109,7 +109,7 @@ async function renderDashboard() {
 
     document.getElementById('stats-row').innerHTML = `
       <div class="stat-card"><div class="stat-num">${credCount}</div><div class="stat-label">Сохранено</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:${healthColor}">${healthPct}%</div><div class="stat-label">Здоровье паролей</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:${healthColor};text-shadow:0 0 16px ${healthColor}40">${healthPct}%</div><div class="stat-label">Здоровье</div></div>
       <div class="stat-card"><div class="stat-num">${withoutCredCount}</div><div class="stat-label">Без пароля</div></div>
     `;
 
@@ -126,11 +126,11 @@ async function renderDashboard() {
     if (filtered.length === 0 && credCount === 0) {
       // First-time user — helpful empty state with action
       document.getElementById('cards-list').innerHTML = `
-        <div class="empty-state" style="text-align:center;padding:40px 20px;">
-          <div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div>
-          <h3 style="margin:0 0 8px;">Начните добавлять пароли</h3>
-          <p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p>
-          <button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Нажмите чтобы добавить первый сервис</button>
+        <div class="empty-state">
+          <div class="empty-icon">🔐</div>
+          <h3>Начните добавлять пароли</h3>
+          <p>Нажмите + чтобы сохранить первый пароль</p>
+          <button class="btn btn-primary" onclick="openAddCredential()" style="margin-top:16px;max-width:280px;">Добавить первый сервис</button>
         </div>`;
       return;
     }
@@ -197,7 +197,7 @@ async function renderDashboard() {
       statsRow.innerHTML = '<div class="stat-card"><div class="stat-num">0</div><div class="stat-label">Сохранено</div></div><div class="stat-card"><div class="stat-num">—</div><div class="stat-label">Здоровье</div></div><div class="stat-card"><div class="stat-num">24</div><div class="stat-label">Без пароля</div></div>';
     }
     if (cardsList) {
-      cardsList.innerHTML = '<div class="empty-state"><div class="empty-icon" style="font-size:48px;margin-bottom:16px;">🔐</div><h3>Начните добавлять пароли</h3><p style="margin:0 0 20px;color:var(--text-secondary);">Нажмите + чтобы сохранить первый пароль</p><button class="btn btn-primary" onclick="openAddCredential()" style="font-size:15px;padding:12px 24px;">Добавить сервис</button></div>';
+      cardsList.innerHTML = '<div class="empty-state"><div class="empty-icon">🔐</div><h3>Начните добавлять пароли</h3><p>Нажмите + чтобы сохранить первый пароль</p><button class="btn btn-primary" onclick="openAddCredential()" style="margin-top:16px;max-width:280px;">Добавить сервис</button></div>';
     }
   }
 }
@@ -358,18 +358,18 @@ async function selectServiceForAdd(svcId) {
   closeModal('modal-add-cred');
   const body = document.getElementById('add-cred-body');
   body.innerHTML = `
-    <div style="text-align:center;margin-bottom:16px">
-      <div style="font-size:40px">${svc.iconEmoji}</div>
-      <div style="font-size:16px;font-weight:700;margin-top:4px">${svc.displayName}</div>
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:44px;margin-bottom:4px">${svc.iconEmoji}</div>
+      <div style="font-size:17px;font-weight:800;letter-spacing:-0.2px">${svc.displayName}</div>
     </div>
     <div class="form-group">
       <label>Имя пользователя / Email</label>
-      <input type="text" class="form-input" id="add-username" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="user@example.com">
+      <input type="text" class="form-input" id="add-username" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none;transition:all 0.25s" placeholder="user@example.com">
     </div>
     <div class="form-group">
       <label>Пароль</label>
       <div class="input-wrapper">
-        <input type="password" id="add-password" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none" placeholder="Пароль">
+        <input type="password" id="add-password" style="width:100%;padding:14px 48px 14px 16px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:15px;outline:none;transition:all 0.25s" placeholder="Пароль">
         <button class="toggle-vis" onclick="toggleVis('add-password')">👁️</button>
       </div>
       <div class="strength-meter"><div class="strength-meter-fill" id="add-strength-fill"></div></div>

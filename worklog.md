@@ -113,3 +113,31 @@ Work Log:
 Stage Summary:
 - v7.0.0 successfully pushed and released on GitHub
 - APK download: https://github.com/redbleach5/passvault/releases/download/v7.0.0/passvault.apk
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Implement service deletion/hiding feature for Russian users
+
+Work Log:
+- Analyzed project structure: 24 hardcoded built-in services, no hide/delete functionality
+- Added hidden service management to vault.js: getHiddenServiceIds(), saveHiddenServiceIds(), isServiceHidden(), hideService(), unhideService()
+- Modified getAllServices() to accept includeHidden parameter, filters hidden services by default
+- Added deleteCustomService() function to vault.js - removes custom service + its credential + autofill data
+- Added showServiceManager() to settings.js - full modal UI with hide/unhide/delete per service
+- Added bulk actions: hideAllUnusedServices() and showAllServices()
+- Added service management modal HTML + CSS to index.html
+- Added "Управление сервисами" settings menu item with 🗂️ icon
+- Added hide/delete buttons to service detail view (vault.js)
+- Added quick-hide button (🚫) on service cards without credentials in dashboard
+- Added hideServiceFromDashboard() and hideServiceFromDetail() functions
+- Synced all changes to passvault-github mirror
+
+Stage Summary:
+- Users can now hide any built-in service (it disappears from dashboard but data is preserved)
+- Users can delete custom services completely (including stored credentials)
+- Bulk "Hide all unused" button for quick cleanup of irrelevant services (e.g., non-Russian services)
+- "Show all" button to restore all hidden services
+- Service Manager modal accessible from Settings → Управление сервисами
+- Quick-hide button directly on cards without credentials in dashboard
+- Hidden services stored in localStorage key `pv_hidden_services`

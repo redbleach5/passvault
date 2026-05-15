@@ -1633,6 +1633,107 @@ select.form-select:focus {
   box-shadow: 0 6px 24px rgba(34,197,94,0.4);
   transform: translateY(-1px);
 }
+
+/* ===== SERVICE MANAGER ===== */
+.svc-mgr-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  transition: all 0.2s;
+}
+
+.svc-mgr-item:hover { border-color: var(--border-accent); }
+
+.svc-mgr-item.svc-mgr-hidden {
+  background: rgba(30, 41, 59, 0.3);
+  border-style: dashed;
+}
+
+.svc-mgr-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.svc-mgr-icon {
+  font-size: 22px;
+  width: 34px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.svc-mgr-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.svc-mgr-name {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.svc-mgr-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.svc-mgr-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.svc-mgr-btn-hide {
+  background: rgba(148,163,184,0.1);
+  color: var(--text-muted);
+}
+.svc-mgr-btn-hide:hover {
+  background: rgba(148,163,184,0.2);
+  color: var(--text-secondary);
+}
+
+.svc-mgr-btn-show {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+.svc-mgr-btn-show:hover {
+  background: var(--accent-glow);
+}
+
+.svc-mgr-btn-danger {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+.svc-mgr-btn-danger:hover {
+  background: rgba(239,68,68,0.2);
+}
+
+.svc-mgr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
 </style>
 </head>
 <body>
@@ -1840,6 +1941,13 @@ select.form-select:focus {
       </div>
       <div class="settings-group">
         <div class="settings-group-title">Управление</div>
+        <div class="settings-item" onclick="showServiceManager()">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">🗂️</div>
+            <div class="settings-item-text"><h3>Управление сервисами</h3><p>Скрыть или удалить ненужные</p></div>
+          </div>
+          <div class="settings-item-right">›</div>
+        </div>
         <div class="settings-item" onclick="openAddCustomService()">
           <div class="settings-item-left">
             <div class="settings-item-icon">➕</div>
@@ -1933,6 +2041,17 @@ select.form-select:focus {
       <button class="modal-close" onclick="closeModal('modal-custom-svc')">✕</button>
     </div>
     <div class="modal-body" id="custom-svc-body"></div>
+  </div>
+</div>
+
+<!-- SERVICE MANAGER MODAL -->
+<div class="modal-overlay" id="modal-svc-manager">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>🗂️ Сервисы</h2>
+      <button class="modal-close" onclick="closeModal('modal-svc-manager')">✕</button>
+    </div>
+    <div class="modal-body" id="svc-manager-body"></div>
   </div>
 </div>
 

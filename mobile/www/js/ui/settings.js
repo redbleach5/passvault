@@ -11,7 +11,7 @@ import {
   escHtml
 } from '../ui.js';
 import { lockVault } from './screens.js';
-import { loadVault, saveVault, loadCustomServices, saveCustomServices, getAllServices, renderDashboard } from './vault.js';
+import { loadVault, saveVault, loadCustomServices, saveCustomServices, getAllServices, renderDashboard, isServiceHidden, hideService, unhideService, deleteCustomService, getHiddenServiceIds } from './vault.js';
 import {
   initFirebase, getFirebaseConfig, saveFirebaseConfig,
   cloudRegister, cloudLogin, cloudLogout,
@@ -373,6 +373,145 @@ async function saveCustomService() {
   await saveCustomServices(custom);
   closeModal('modal-custom-svc');
   showToast('Сервис добавлен!');
+  renderDashboard();
+}
+
+// ===== Service Manager (hide/unhide/delete) =====
+
+async function showServiceManager() {
+  const body = document.getElementById('svc-manager-body');
+  const allServices = await getAllServices(true); // include hidden
+  const hiddenIds = getHiddenServiceIds();
+  const vault = await loadVault();
+
+  // Separate built-in and custom
+  const builtin = allServices.filter(s => !s.id.startsWith('custom_'));
+  const custom = allServices.filter(s => s.id.startsWith('custom_'));
+
+  // Sort: visible first, then hidden
+  const sortByVisibility = (a, b) => {
+    const aHidden = hiddenIds.includes(a.id) ? 1 : 0;
+    const bHidden = hiddenIds.includes(b.id) ? 1 : 0;
+    if (aHidden !== bHidden) return aHidden - bHidden;
+    return a.displayName.localeCompare(b.displayName, 'ru');
+  };
+
+  builtin.sort(sortByVisibility);
+  custom.sort(sortByVisibility);
+
+  const visibleCount = allServices.filter(s => !hiddenIds.includes(s.id)).length;
+  const hiddenCount = hiddenIds.length;
+
+  const renderSvcItem = (svc, isCustom) => {
+    const isHidden = hiddenIds.includes(svc.id);
+    const hasCred = !!(vault.credentials && vault.credentials[svc.id]);
+    const cat = CATEGORIES[svc.category] || CATEGORIES.custom;
+
+    return `
+      <div class="svc-mgr-item ${isHidden ? 'svc-mgr-hidden' : ''}" data-svc-id="${escHtml(svc.id)}">
+        <div class="svc-mgr-left">
+          <div class="svc-mgr-icon" style="opacity:${isHidden ? '0.4' : '1'}">${svc.iconEmoji}</div>
+          <div class="svc-mgr-info">
+            <div class="svc-mgr-name" style="opacity:${isHidden ? '0.5' : '1'}">
+              ${escHtml(svc.displayName)}
+              <span style="font-size:10px;padding:2px 6px;border-radius:8px;margin-left:4px;background:${cat.color}20;color:${cat.color};font-weight:600">${escHtml(cat.name)}</span>
+              ${hasCred ? '<span style="font-size:10px;padding:2px 6px;border-radius:8px;margin-left:2px;background:rgba(34,197,94,0.12);color:#22c55e;font-weight:600">Пароль</span>' : ''}
+            </div>
+            ${isHidden ? '<div style="font-size:11px;color:var(--text-muted);margin-top:1px">Скрыт</div>' : ''}
+          </div>
+        </div>
+        <div class="svc-mgr-actions">
+          ${isCustom ? `<button class="svc-mgr-btn svc-mgr-btn-danger" onclick="deleteSvcFromManager('${escHtml(svc.id)}')" title="Удалить">🗑️</button>` : ''}
+          <button class="svc-mgr-btn ${isHidden ? 'svc-mgr-btn-show' : 'svc-mgr-btn-hide'}" onclick="toggleSvcVisibility('${escHtml(svc.id)}')" title="${isHidden ? 'Показать' : 'Скрыть'}">
+            ${isHidden ? '👁️' : '🚫'}
+          </button>
+        </div>
+      </div>`;
+  };
+
+  body.innerHTML = `
+    <div style="text-align:center;padding:4px 0 16px">
+      <div style="font-size:36px">🗂️</div>
+      <div style="font-size:16px;font-weight:700;margin-top:6px">Управление сервисами</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+        Видимых: ${visibleCount} · Скрытых: ${hiddenCount}
+      </div>
+    </div>
+
+    <div style="background:var(--bg-tertiary);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);line-height:1.5;border:1px solid var(--border)">
+      💡 Скрытые сервисы не отображаются в хранилище. Кастомные сервисы можно удалить полностью. Если у скрытого сервиса есть пароль — он сохранится.
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-outline btn-sm" style="flex:1;font-size:12px" onclick="hideAllUnusedServices()">🚫 Скрыть неиспользуемые</button>
+      <button class="btn btn-outline btn-sm" style="flex:1;font-size:12px" onclick="showAllServices()">👁️ Показать все</button>
+    </div>
+
+    ${builtin.length > 0 ? `
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;padding-left:4px">Встроенные (${builtin.length})</div>
+      <div class="svc-mgr-list">
+        ${builtin.map(s => renderSvcItem(s, false)).join('')}
+      </div>
+    ` : ''}
+
+    ${custom.length > 0 ? `
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin:16px 0 8px;padding-left:4px">Пользовательские (${custom.length})</div>
+      <div class="svc-mgr-list">
+        ${custom.map(s => renderSvcItem(s, true)).join('')}
+      </div>
+    ` : ''}
+  `;
+
+  openModal('modal-svc-manager');
+}
+
+async function toggleSvcVisibility(svcId) {
+  if (isServiceHidden(svcId)) {
+    unhideService(svcId);
+  } else {
+    hideService(svcId);
+  }
+  // Refresh the manager modal
+  await showServiceManager();
+  renderDashboard();
+}
+
+async function deleteSvcFromManager(svcId) {
+  const svc = SERVICES.find(s => s.id === svcId);
+  const displayName = svc ? svc.displayName : svcId;
+  showConfirm('Удалить сервис?', `Удалить «${displayName}»? Если у сервиса есть пароль, он тоже будет удалён. Это действие нельзя отменить.`, 'Удалить', async () => {
+    const ok = await deleteCustomService(svcId);
+    if (ok) {
+      showToast('Сервис удалён');
+      await showServiceManager();
+      renderDashboard();
+    } else {
+      showToast('Не удалось удалить');
+    }
+  });
+}
+
+async function hideAllUnusedServices() {
+  const allServices = await getAllServices(true);
+  const vault = await loadVault();
+  const svcIdsWithCreds = new Set(Object.keys(vault.credentials || {}));
+  // Hide services that have NO credentials
+  let count = 0;
+  allServices.forEach(s => {
+    if (!svcIdsWithCreds.has(s.id) && !isServiceHidden(s.id)) {
+      hideService(s.id);
+      count++;
+    }
+  });
+  showToast(`${count} сервисов скрыто`);
+  await showServiceManager();
+  renderDashboard();
+}
+
+async function showAllServices() {
+  localStorage.removeItem('pv_hidden_services');
+  showToast('Все сервисы видны');
+  await showServiceManager();
   renderDashboard();
 }
 
@@ -1218,11 +1357,18 @@ window.doWebdavUpload = doWebdavUploadFn;
 window.doWebdavDownload = doWebdavDownloadFn;
 window.toggleBiometric = toggleBiometric;
 window.confirmBiometricSetup = confirmBiometricSetupFn;
+window.showServiceManager = showServiceManager;
+window.toggleSvcVisibility = toggleSvcVisibility;
+window.deleteSvcFromManager = deleteSvcFromManager;
+window.hideAllUnusedServices = hideAllUnusedServices;
+window.showAllServices = showAllServices;
 
 export {
   exportVault, autoBackup, getLastBackupTimeText,
   triggerImportVault, handleImportFile, doImportVault,
   openAddCustomService, saveCustomService,
+  showServiceManager, toggleSvcVisibility, deleteSvcFromManager,
+  hideAllUnusedServices, showAllServices,
   showAuditLog, showSecurityInfo, showAbout, showCloudSettings,
   showPasswordHealth, showAutoLockSettings
 };

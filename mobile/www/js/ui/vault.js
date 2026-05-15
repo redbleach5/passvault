@@ -19,10 +19,41 @@ import { setLocalModifiedTimestamp } from '../conflicts.js';
 
 // ===== Data helpers =====
 
-async function getAllServices() {
+// Hidden (built-in) service IDs stored in localStorage
+function getHiddenServiceIds() {
+  try {
+    const raw = localStorage.getItem('pv_hidden_services');
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveHiddenServiceIds(ids) {
+  localStorage.setItem('pv_hidden_services', JSON.stringify(ids));
+}
+
+function isServiceHidden(svcId) {
+  return getHiddenServiceIds().includes(svcId);
+}
+
+function hideService(svcId) {
+  const ids = getHiddenServiceIds();
+  if (!ids.includes(svcId)) { ids.push(svcId); saveHiddenServiceIds(ids); }
+}
+
+function unhideService(svcId) {
+  const ids = getHiddenServiceIds().filter(id => id !== svcId);
+  saveHiddenServiceIds(ids);
+}
+
+async function getAllServices(includeHidden = false) {
   let custom = [];
   try { custom = await loadCustomServices(); } catch(e) {}
-  return [...SERVICES, ...custom];
+  let all = [...SERVICES, ...custom];
+  if (!includeHidden) {
+    const hiddenIds = getHiddenServiceIds();
+    all = all.filter(s => !hiddenIds.includes(s.id));
+  }
+  return all;
 }
 
 function getServiceById(id) {
@@ -175,7 +206,10 @@ async function renderDashboard() {
             <div class="svc-name">${escHtml(svc.displayName)} ${catBadge(svc.category)}</div>
             <div class="svc-detail">Нет учётных данных</div>
           </div>
-          <button class="svc-action-btn">+ Добавить</button>
+          <div style="display:flex;gap:4px;align-items:center">
+            <button class="svc-action-btn" style="padding:4px 6px;font-size:12px;background:transparent;color:var(--text-muted)" data-action="hide-card" data-svc="${safeId}" title="Скрыть">🚫</button>
+            <button class="svc-action-btn">+ Добавить</button>
+          </div>
         </div>`;
       }
     }).join('');
@@ -192,6 +226,11 @@ async function renderDashboard() {
           copyToClipboard(cred.password, el);
           auditLog('copy_password', svcId, null, 'success');
         }
+        return;
+      }
+      if (action === 'hide-card') {
+        e.stopPropagation();
+        hideServiceFromDashboard(svcId);
         return;
       }
       if (action === 'detail') openDetail(svcId);
@@ -267,6 +306,8 @@ async function openDetail(svcId) {
         <button class="btn btn-primary" data-action="wizard" data-svc="${escHtml(svcId)}">🔄 Сменить пароль</button>
         ${svc.passwordChangeUrl && svc.passwordChangeUrl.startsWith('https://') ? `<button class="btn btn-outline" data-action="open-url" data-url="${escHtml(svc.passwordChangeUrl)}">🔗 Открыть страницу смены пароля</button>` : ''}
         <button class="btn btn-danger btn-sm" style="margin-top:8px" data-action="delete" data-svc="${escHtml(svcId)}">🗑️ Удалить учётные данные</button>
+        ${svc.id.startsWith('custom_') ? `<button class="btn btn-danger btn-sm" data-action="delete-svc" data-svc="${escHtml(svcId)}">🗑️ Удалить сервис полностью</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-action="hide-svc" data-svc="${escHtml(svcId)}">🚫 Скрыть сервис</button>
       </div>`;
   }
 
@@ -293,6 +334,8 @@ async function openDetail(svcId) {
     else if (action === 'toggle-pw' && clickSvcId) { const c = state.credMap.get(clickSvcId); if (c) { toggleDetailPw(c.password, btn); auditLog('view_password', clickSvcId, null, 'success'); } }
     else if (action === 'wizard' && clickSvcId) { import('./wizard.js').then(({ startWizard }) => { startWizard(clickSvcId); auditLog('wizard_start', clickSvcId, null, 'success'); }); }
     else if (action === 'delete' && clickSvcId) { deleteCredential(clickSvcId); }
+    else if (action === 'delete-svc' && clickSvcId) { deleteCustomServiceFromDetail(clickSvcId); }
+    else if (action === 'hide-svc' && clickSvcId) { hideServiceFromDetail(clickSvcId); }
     else if (action === 'open-url') { const url = btn.dataset.url; if (url && url.startsWith('https://')) { window.open(url, '_blank'); auditLog('open_url', clickSvcId, null, 'success'); } }
   };
   showScreen('screen-detail');
@@ -326,6 +369,42 @@ async function deleteCredential(svcId) {
     closeDetail();
     renderDashboard();
   });
+}
+
+async function deleteCustomServiceFromDetail(svcId) {
+  const svc = await getServiceByIdAsync(svcId);
+  const name = svc ? svc.displayName : svcId;
+  showConfirm('Удалить сервис?', `Удалить «${name}» полностью? Все данные будут потеряны. Это действие нельзя отменить.`, 'Удалить', async () => {
+    const ok = await deleteCustomService(svcId);
+    if (ok) {
+      showToast('Сервис удалён');
+      closeDetail();
+      renderDashboard();
+    } else {
+      showToast('Не удалось удалить');
+    }
+  });
+}
+
+async function hideServiceFromDetail(svcId) {
+  const svc = await getServiceByIdAsync(svcId);
+  const name = svc ? svc.displayName : svcId;
+  showConfirm('Скрыть сервис?', `Скрыть «${name}» из списка? Вы сможете вернуть его через Настройки → Управление сервисами.`, 'Скрыть', async () => {
+    hideService(svcId);
+    auditLog('service_hide', svcId, null, 'success');
+    showToast(`${name} скрыт`);
+    closeDetail();
+    renderDashboard();
+  });
+}
+
+async function hideServiceFromDashboard(svcId) {
+  const svc = await getServiceByIdAsync(svcId);
+  const name = svc ? svc.displayName : svcId;
+  hideService(svcId);
+  auditLog('service_hide', svcId, null, 'success');
+  showToast(`${name} скрыт`);
+  renderDashboard();
 }
 
 // ===== Add Credential =====
@@ -454,9 +533,30 @@ window.fillGenPw = fillGenPw;
 window.toggleVis = toggleVis;
 window.openAddCredential = openAddCredential;
 
+async function deleteCustomService(svcId) {
+  const custom = await loadCustomServices();
+  const idx = custom.findIndex(s => s.id === svcId);
+  if (idx === -1) return false;
+  custom.splice(idx, 1);
+  await saveCustomServices(custom);
+  // Also remove credential if exists
+  const vault = await loadVault();
+  if (vault.credentials && vault.credentials[svcId]) {
+    delete vault.credentials[svcId];
+    await saveVault(vault);
+    state.credMap.delete(svcId);
+  }
+  // Remove from autofill
+  try { await removeAutofillCredential(svcId); } catch(e) {}
+  auditLog('service_delete', svcId, null, 'success');
+  return true;
+}
+
 export {
   getAllServices, getServiceById, getServiceByIdAsync,
   saveVault, loadVault, saveCustomServices, loadCustomServices,
+  getHiddenServiceIds, saveHiddenServiceIds, isServiceHidden, hideService, unhideService,
+  deleteCustomService,
   renderDashboard, setCategory,
   openDetail, toggleDetailPw, closeDetail, deleteCredential,
   openAddCredential, openAddCredentialFor, selectServiceForAdd, saveCredential, fillGenPw

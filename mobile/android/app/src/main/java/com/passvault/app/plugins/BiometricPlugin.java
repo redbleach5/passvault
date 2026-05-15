@@ -17,6 +17,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -144,31 +147,6 @@ public class BiometricPlugin extends Plugin {
             }
 
             FragmentActivity fragmentActivity = (FragmentActivity) activity;
-            Executor executor = Executors.newSingleThreadExecutor();
-
-            BiometricPrompt biometricPrompt = new BiometricPrompt(fragmentActivity,
-                executor, new BiometricPrompt.AuthenticationCallback() {
-                @Override
-                public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                    JSObject ret = new JSObject();
-                    ret.put("success", true);
-                    call.resolve(ret);
-                }
-
-                @Override
-                public void onAuthenticationFailed() {
-                    // Don't reject yet — user can try again
-                }
-
-                @Override
-                public void onAuthenticationError(int errorCode, CharSequence errString) {
-                    JSObject ret = new JSObject();
-                    ret.put("success", false);
-                    ret.put("error", errString != null ? errString.toString() : "Authentication error");
-                    ret.put("errorCode", errorCode);
-                    call.resolve(ret);
-                }
-            });
 
             // Build PromptInfo — try biometrics first. If no biometrics enrolled,
             // fall back to DEVICE_CREDENTIAL only (PIN/pattern/password).
@@ -199,11 +177,50 @@ public class BiometricPlugin extends Plugin {
 
             BiometricPrompt.PromptInfo promptInfo = promptBuilder.build();
 
-            // Simple authenticate — NO CryptoObject. This is the key fix:
-            // Using CryptoObject would require BIOMETRIC_STRONG only and
-            // setUserAuthenticationRequired(true) on the key, which causes
-            // "crypto-based authentication is not supported for class 2 biometrics".
-            biometricPrompt.authenticate(promptInfo);
+            // CRITICAL: BiometricPrompt.authenticate() MUST be called from the main/UI thread.
+            // Capacitor invokes plugin methods on a background thread, which causes
+            // "must be called from main thread of fragment host" crash.
+            // We create the BiometricPrompt and call authenticate() on the UI thread.
+            fragmentActivity.runOnUiThread(() -> {
+                try {
+                    Executor executor = Executors.newSingleThreadExecutor();
+
+                    BiometricPrompt biometricPrompt = new BiometricPrompt(fragmentActivity,
+                        executor, new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                            JSObject ret = new JSObject();
+                            ret.put("success", true);
+                            call.resolve(ret);
+                        }
+
+                        @Override
+                        public void onAuthenticationFailed() {
+                            // Don't reject yet — user can try again
+                        }
+
+                        @Override
+                        public void onAuthenticationError(int errorCode, CharSequence errString) {
+                            JSObject ret = new JSObject();
+                            ret.put("success", false);
+                            ret.put("error", errString != null ? errString.toString() : "Authentication error");
+                            ret.put("errorCode", errorCode);
+                            call.resolve(ret);
+                        }
+                    });
+
+                    // Simple authenticate — NO CryptoObject. This is the key fix:
+                    // Using CryptoObject would require BIOMETRIC_STRONG only and
+                    // setUserAuthenticationRequired(true) on the key, which causes
+                    // "crypto-based authentication is not supported for class 2 biometrics".
+                    biometricPrompt.authenticate(promptInfo);
+                } catch (Exception e) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", false);
+                    ret.put("error", e.getMessage());
+                    call.resolve(ret);
+                }
+            });
         } catch (Exception e) {
             JSObject ret = new JSObject();
             ret.put("success", false);
@@ -317,54 +334,9 @@ public class BiometricPlugin extends Plugin {
             }
 
             FragmentActivity fragmentActivity = (FragmentActivity) activity;
-            Executor executor = Executors.newSingleThreadExecutor();
 
             // Store the password in a final variable for the callback
             final String password = storedPassword;
-
-            BiometricPrompt biometricPrompt = new BiometricPrompt(fragmentActivity,
-                executor, new BiometricPrompt.AuthenticationCallback() {
-                @Override
-                public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                    // Biometric auth succeeded — use the already-captured password.
-                    // NOTE: We do NOT re-read from EncryptedSharedPreferences here because
-                    // this callback runs on a background executor thread, and Android Keystore
-                    // operations can fail on some devices when called from non-main threads.
-                    // The password was captured before the prompt was shown, so it's safe to use.
-                    try {
-                        if (password != null) {
-                            JSObject ret = new JSObject();
-                            ret.put("success", true);
-                            ret.put("password", password);
-                            call.resolve(ret);
-                        } else {
-                            JSObject ret = new JSObject();
-                            ret.put("success", false);
-                            ret.put("error", "Password not found in secure storage");
-                            call.resolve(ret);
-                        }
-                    } catch (Exception e) {
-                        JSObject ret = new JSObject();
-                        ret.put("success", false);
-                        ret.put("error", "Failed to retrieve password: " + e.getMessage());
-                        call.resolve(ret);
-                    }
-                }
-
-                @Override
-                public void onAuthenticationFailed() {
-                    // Don't resolve — user can try again
-                }
-
-                @Override
-                public void onAuthenticationError(int errorCode, CharSequence errString) {
-                    JSObject ret = new JSObject();
-                    ret.put("success", false);
-                    ret.put("error", errString != null ? errString.toString() : "Authentication error");
-                    ret.put("errorCode", errorCode);
-                    call.resolve(ret);
-                }
-            });
 
             // Build PromptInfo — try biometrics first. If no biometrics enrolled,
             // fall back to DEVICE_CREDENTIAL only (PIN/pattern/password).
@@ -395,8 +367,67 @@ public class BiometricPlugin extends Plugin {
 
             BiometricPrompt.PromptInfo promptInfo = promptBuilder.build();
 
-            // Simple authenticate — NO CryptoObject!
-            biometricPrompt.authenticate(promptInfo);
+            // CRITICAL: BiometricPrompt.authenticate() MUST be called from the main/UI thread.
+            // Capacitor invokes plugin methods on a background thread, which causes
+            // "must be called from main thread of fragment host" crash.
+            // We create the BiometricPrompt and call authenticate() on the UI thread.
+            fragmentActivity.runOnUiThread(() -> {
+                try {
+                    Executor executor = Executors.newSingleThreadExecutor();
+
+                    BiometricPrompt biometricPrompt = new BiometricPrompt(fragmentActivity,
+                        executor, new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                            // Biometric auth succeeded — use the already-captured password.
+                            // NOTE: We do NOT re-read from EncryptedSharedPreferences here because
+                            // this callback runs on a background executor thread, and Android Keystore
+                            // operations can fail on some devices when called from non-main threads.
+                            // The password was captured before the prompt was shown, so it's safe to use.
+                            try {
+                                if (password != null) {
+                                    JSObject ret = new JSObject();
+                                    ret.put("success", true);
+                                    ret.put("password", password);
+                                    call.resolve(ret);
+                                } else {
+                                    JSObject ret = new JSObject();
+                                    ret.put("success", false);
+                                    ret.put("error", "Password not found in secure storage");
+                                    call.resolve(ret);
+                                }
+                            } catch (Exception e) {
+                                JSObject ret = new JSObject();
+                                ret.put("success", false);
+                                ret.put("error", "Failed to retrieve password: " + e.getMessage());
+                                call.resolve(ret);
+                            }
+                        }
+
+                        @Override
+                        public void onAuthenticationFailed() {
+                            // Don't resolve — user can try again
+                        }
+
+                        @Override
+                        public void onAuthenticationError(int errorCode, CharSequence errString) {
+                            JSObject ret = new JSObject();
+                            ret.put("success", false);
+                            ret.put("error", errString != null ? errString.toString() : "Authentication error");
+                            ret.put("errorCode", errorCode);
+                            call.resolve(ret);
+                        }
+                    });
+
+                    // Simple authenticate — NO CryptoObject!
+                    biometricPrompt.authenticate(promptInfo);
+                } catch (Exception e) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", false);
+                    ret.put("error", e.getMessage());
+                    call.resolve(ret);
+                }
+            });
         } catch (Exception e) {
             JSObject ret = new JSObject();
             ret.put("success", false);

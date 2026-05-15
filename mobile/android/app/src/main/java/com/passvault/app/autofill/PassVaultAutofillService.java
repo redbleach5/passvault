@@ -2,7 +2,6 @@ package com.passvault.app.autofill;
 
 import android.app.assist.AssistStructure;
 import android.os.CancellationSignal;
-import android.service.autofill.AutofillService;
 import android.service.autofill.Dataset;
 import android.service.autofill.FillCallback;
 import android.service.autofill.FillContext;
@@ -39,7 +38,7 @@ import java.util.List;
  * 4. We return a FillResponse with Dataset entries for each matching credential
  * 5. When the user taps a suggestion, Android fills in the username and password
  */
-public class AutofillService extends AutofillService {
+public class PassVaultAutofillService extends android.service.autofill.AutofillService {
 
     private static final String TAG = "PassVaultAutofill";
 
@@ -177,7 +176,26 @@ public class AutofillService extends AutofillService {
 
         for (int i = 0; i < windowNodeCount; i++) {
             AssistStructure.WindowNode windowNode = structure.getWindowNodeAt(i);
+            // Capture package name from window node (available since API 24)
+            if (parsed.packageName == null || parsed.packageName.isEmpty()) {
+                String pkg = windowNode.getTitle() != null ? windowNode.getTitle().toString() : null;
+                // Package name comes from the Activity's component name in the structure
+                // It's not directly on WindowNode in API 24, so we get it from the activity component
+            }
             parseViewNode(windowNode.getRootViewNode(), parsed);
+        }
+
+        // If we still don't have a package name, try the activity component from the structure
+        if (parsed.packageName == null || parsed.packageName.isEmpty()) {
+            try {
+                // The activity component is available in the structure
+                android.content.ComponentName component = structure.getActivityComponent();
+                if (component != null) {
+                    parsed.packageName = component.getPackageName();
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
         }
 
         return parsed;
@@ -283,14 +301,7 @@ public class AutofillService extends AutofillService {
             }
         }
 
-        // Capture package name and web domain from the root/top-level nodes
-        if (parsed.packageName == null || parsed.packageName.isEmpty()) {
-            String pkg = node.getPackageName();
-            if (pkg != null && !pkg.isEmpty()) {
-                parsed.packageName = pkg;
-            }
-        }
-
+        // Capture web domain from nodes
         if (parsed.webDomain == null || parsed.webDomain.isEmpty()) {
             String domain = node.getWebDomain();
             if (domain != null && !domain.isEmpty()) {

@@ -1803,6 +1803,13 @@ select.form-select:focus {
           </div>
           <div class="settings-item-right"><button class="toggle-switch" id="biometric-toggle"></button></div>
         </div>
+        <div class="settings-item" id="autofill-settings-item" onclick="toggleAutofill()" style="display:none">
+          <div class="settings-item-left">
+            <div class="settings-item-icon">🔑</div>
+            <div class="settings-item-text"><h3>Автозаполнение</h3><p id="autofill-status-text">Нажмите для настройки</p></div>
+          </div>
+          <div class="settings-item-right"><button class="toggle-switch" id="autofill-toggle"></button></div>
+        </div>
       </div>
       <div class="settings-group">
         <div class="settings-group-title">Резервное копирование</div>

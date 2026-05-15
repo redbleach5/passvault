@@ -217,6 +217,28 @@ async function enterApp() {
     // Dynamic import to avoid circular dependency
     const { generatePassword } = await import('./generator.js');
     generatePassword();
+    // Sync autofill credentials in background (best-effort)
+    try {
+      const { syncAllAutofillCredentials } = await import('../autofill.js');
+      const { loadVault, getAllServices } = await import('./vault.js');
+      const vault = await loadVault();
+      const allSvc = await getAllServices();
+      const creds = Object.entries(vault.credentials || {}).map(([svcId, cred]) => {
+        const svc = allSvc.find(s => s.id === svcId);
+        return {
+          serviceId: svcId,
+          username: cred.username || '',
+          password: cred.password || '',
+          urls: svc ? [svc.loginUrl, svc.passwordChangeUrl].filter(Boolean) : []
+        };
+      }).filter(c => c.username && c.password);
+      await syncAllAutofillCredentials(creds);
+    } catch(e) { console.warn('Autofill sync skipped:', e); }
+    // Initialize autofill UI
+    try {
+      const { initAutofillUI } = await import('../autofill.js');
+      await initAutofillUI();
+    } catch(e) { console.warn('Autofill UI init skipped:', e); }
   } catch(e) {
     console.error('enterApp error:', e);
     // Ensure main screen is shown even on error

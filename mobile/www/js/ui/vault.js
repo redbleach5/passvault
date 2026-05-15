@@ -14,6 +14,8 @@ import {
 } from '../ui.js';
 import { lockVault, startAutoLock } from './screens.js';
 import { getCachedIcon } from '../icons.js';
+import { saveAutofillCredential, removeAutofillCredential, syncAllAutofillCredentials } from '../autofill.js';
+import { setLocalModifiedTimestamp } from '../conflicts.js';
 
 // ===== Data helpers =====
 
@@ -46,6 +48,8 @@ async function saveVault(vaultData) {
   const json = JSON.stringify(vaultData);
   const enc = await encrypt(json, state.masterKey);
   localStorage.setItem('pv_vault', enc);
+  // Update local modified timestamp for conflict detection
+  try { setLocalModifiedTimestamp(); } catch(e) {}
   // Sync to secure storage immediately on mobile to prevent data loss on resume
   try { await syncToSecureStorage(); } catch(e) {}
 }
@@ -315,6 +319,8 @@ async function deleteCredential(svcId) {
     delete vault.credentials[svcId];
     state.credMap.delete(svcId);
     await saveVault(vault);
+    // Remove credential from autofill store
+    try { await removeAutofillCredential(svcId); } catch(e) {}
     auditLog('credential_delete', svcId, null, 'success');
     showToast('Удалено');
     closeDetail();
@@ -427,6 +433,14 @@ async function saveCredential(svcId) {
   const vault = await loadVault();
   vault.credentials[svcId] = { username, password, notes, updatedAt: Date.now() };
   await saveVault(vault);
+  // Sync credential to autofill service
+  try {
+    const svc = await getServiceByIdAsync(svcId);
+    if (svc) {
+      const urls = [svc.loginUrl, svc.passwordChangeUrl].filter(Boolean);
+      await saveAutofillCredential(svcId, username, password, urls);
+    }
+  } catch(e) { /* autofill sync is best-effort */ }
   closeModal('modal-add-cred');
   auditLog('credential_save', svcId, null, 'success');
   showToast('Сохранено!');

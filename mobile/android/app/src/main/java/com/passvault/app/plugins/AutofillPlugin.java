@@ -55,7 +55,7 @@ public class AutofillPlugin extends Plugin {
             Context context = getContext();
             String autofillService = Settings.Secure.getString(
                 context.getContentResolver(),
-                Settings.Secure.AUTOFILL_SERVICE
+                "autofill_service"
             );
 
             boolean enabled = autofillService != null

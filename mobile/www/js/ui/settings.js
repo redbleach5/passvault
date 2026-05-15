@@ -27,6 +27,7 @@ import {
 import { pickFile, saveFile } from '../filepicker.js';
 import { isGDriveConfigured, getGDriveConfig, testGDriveConnection, gdriveUpload, gdriveDownload } from '../gdrive.js';
 import { isDropboxConfigured, getDropboxConfig, testDropboxConnection, dropboxUpload, dropboxDownload } from '../dropbox.js';
+import { detectConflict, resolveConflict, showConflictModal, setLastSyncTimestamp, getLocalModifiedTimestamp, mergeVaultData } from '../conflicts.js';
 
 // ===== Export / Import =====
 
@@ -1059,13 +1060,38 @@ async function doWebdavDownloadFn() {
           showToast('Файл на сервере не является копией PassVault');
           return;
         }
-        // Apply the import
+        // Check for sync conflict
+        if (state.masterKey) {
+          const localVault = await loadVault();
+          const remoteTimestamp = importObj.timestamp || null;
+          const localTimestamp = getLocalModifiedTimestamp();
+          const conflictInfo = detectConflict(
+            { ...localVault, lastModified: localTimestamp },
+            { credentials: {}, lastModified: remoteTimestamp },
+            localStorage.getItem('pv_last_sync_timestamp')
+          );
+          if (conflictInfo.status === 'conflict' && localVault.credentials && Object.keys(localVault.credentials).length > 0) {
+            // Both sides have changes — show conflict modal
+            const remoteVault = importObj.vault ? JSON.parse(await (await import('../crypto.js')).decryptData(importObj.vault, state.masterKey) || '{}') : {};
+            showConflictModal(conflictInfo, async (strategy) => {
+              const resolved = resolveConflict(strategy, localVault, remoteVault, localStorage.getItem('pv_last_sync_timestamp'));
+              await saveVault(resolved);
+              setLastSyncTimestamp(new Date().toISOString());
+              showToast('Конфликт разрешён. Данные объединены.');
+              auditLog('webdav_download', null, 'Conflict resolved: ' + strategy, 'success');
+              renderDashboard();
+            });
+            return;
+          }
+        }
+        // No conflict or vault locked — apply the import
         if (importObj.salt) localStorage.setItem('pv_salt', importObj.salt);
         if (importObj.hash) localStorage.setItem('pv_hash', importObj.hash);
         if (importObj.vault) localStorage.setItem('pv_vault', importObj.vault);
         if (importObj.customServices) localStorage.setItem('pv_custom_services', importObj.customServices);
         if (importObj.auditLog) localStorage.setItem('pv_audit', importObj.auditLog);
         if (importObj.formatVersion) localStorage.setItem('pv_format', importObj.formatVersion);
+        setLastSyncTimestamp(new Date().toISOString());
 
         auditLog('webdav_download', null, 'Downloaded from WebDAV', 'success');
         showToast('✓ Данные скачаны. Разблокируйте хранилище.');

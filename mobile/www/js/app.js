@@ -19,6 +19,8 @@ import { APP_VERSION, autoCheckUpdate, manualCheckUpdate, updateVersionDisplay }
 // Import icons module for favicon prefetch
 import { prefetchAllIcons } from './icons.js';
 import { SERVICES } from './services.js';
+// Import autofill module for autofill UI and sync
+import { initAutofillUI, syncAllAutofillCredentials } from './autofill.js';
 
 // ===== Setup =====
 

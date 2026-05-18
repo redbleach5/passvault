@@ -20,10 +20,9 @@ async function auditLog(action, serviceId, details, result) {
       ts: Date.now(),
       action: action,
       svc: serviceId || null,
-      detail: details || null,
-      result: result || null,
-      ua: navigator.userAgent.substring(0, 80) || null,
-      platform: navigator.platform || null
+      // SECURITY: Do not store details in plaintext fallback
+      // Only include details in encrypted storage
+      result: result || null
     };
 
     if (state.masterKey) {
@@ -33,13 +32,17 @@ async function auditLog(action, serviceId, details, result) {
         const dec = await decryptData(raw, state.masterKey);
         if (dec) { try { logs = JSON.parse(dec); } catch(e) { logs = []; } }
       }
-      logs.push(entry);
+      // Include full details only in encrypted storage
+      const fullEntry = { ...entry, detail: details || null, ua: navigator.userAgent.substring(0, 80) || null, platform: navigator.platform || null };
+      logs.push(fullEntry);
       while (logs.length > MAX_AUDIT_ENTRIES) logs.shift();
       const enc = await encrypt(JSON.stringify(logs), state.masterKey);
       localStorage.setItem('pv_audit', enc);
     } else {
+      // When vault is locked: store minimal info without details
+      // This reduces information leakage from plaintext fallback
       const logs = JSON.parse(localStorage.getItem('pv_audit_plain') || '[]');
-      logs.push(entry);
+      logs.push(entry); // No 'detail' field in plaintext
       while (logs.length > MAX_AUDIT_ENTRIES) logs.shift();
       localStorage.setItem('pv_audit_plain', JSON.stringify(logs));
     }

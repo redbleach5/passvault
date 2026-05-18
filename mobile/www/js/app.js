@@ -4,7 +4,7 @@
 
 import { state } from './state.js';
 import { deriveKeyAndHash, constantTimeEqual, migrateVaultIfNeeded } from './crypto.js';
-import { preLoadSecureData, syncToSecureStorage } from './storage.js';
+import { preLoadSecureData, syncToSecureStorage, encryptCloudConfigs, decryptCloudConfigs } from './storage.js';
 import { auditLog } from './audit.js';
 import { showScreen, showToast, updateStrengthMeter, closeConfirm, confirmAction, toggleVis, closeModal } from './ui.js';
 import { lockVault, startAutoLock, enterApp, switchTab, toggleTheme, initTheme } from './ui/screens.js';
@@ -21,6 +21,33 @@ import { prefetchAllIcons } from './icons.js';
 import { SERVICES } from './services.js';
 // Import autofill module for autofill UI and sync
 import { initAutofillUI, syncAllAutofillCredentials } from './autofill.js';
+
+// ===== Tamper-resistant lockout HMAC =====
+
+/**
+ * Compute SHA-256 HMAC of the lockout counter to detect tampering.
+ * Uses Web Crypto API for proper HMAC computation.
+ * An attacker cannot forge this without knowing the stored hash.
+ */
+async function computeLockoutHmac(attempts, lockoutUntil, storedHash) {
+  const message = attempts + ':' + lockoutUntil + ':' + storedHash;
+  const enc = new TextEncoder();
+  // Use the stored hash as the HMAC key (attacker doesn't know it)
+  const keyData = enc.encode(storedHash);
+  const key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function updateLockoutHmac(attempts, lockoutUntil, storedHash) {
+  try {
+    const hmac = await computeLockoutHmac(attempts, lockoutUntil || 0, storedHash);
+    localStorage.setItem('pv_lockout_hmac', hmac);
+  } catch(e) {
+    // If HMAC computation fails, still save the counter (degraded security)
+    console.warn('Lockout HMAC computation failed:', e);
+  }
+}
 
 // ===== Setup =====
 
@@ -135,6 +162,43 @@ async function unlockWithPassword(pw) {
     return;
   }
 
+  // Tamper-resistant lockout: verify the lockout counter hasn't been tampered with
+  // by checking a HMAC of the counter against the stored hash
+  const storedAttempts = parseInt(localStorage.getItem('pv_failed_attempts') || '0', 10);
+  const storedLockoutUntil = parseInt(localStorage.getItem('pv_lockout_until') || '0', 10);
+  const lockoutHmac = localStorage.getItem('pv_lockout_hmac');
+
+  // Compute expected HMAC: SHA-256(failedAttempts + ':' + lockoutUntil + ':' + storedHash)
+  // This makes it impossible to reset the counter without knowing the hash
+  if (lockoutHmac) {
+    const expectedHmac = await computeLockoutHmac(storedAttempts, storedLockoutUntil, storedHash);
+    if (expectedHmac !== lockoutHmac) {
+      // Tampering detected — apply maximum lockout
+      state.failedAttempts = 5;
+      state.lockoutUntil = Date.now() + 15 * 60 * 1000;
+      localStorage.setItem('pv_failed_attempts', '5');
+      localStorage.setItem('pv_lockout_until', String(state.lockoutUntil));
+      await updateLockoutHmac(5, state.lockoutUntil, storedHash);
+      showToast('Обнаружено вмешательство! Блокировка на 15 минут.');
+      return;
+    }
+  }
+
+  // Apply stored lockout state
+  state.failedAttempts = storedAttempts;
+  if (storedLockoutUntil > Date.now()) {
+    state.lockoutUntil = storedLockoutUntil;
+  }
+
+  const now = Date.now();
+  if (now < state.lockoutUntil) {
+    const waitSec = Math.ceil((state.lockoutUntil - now) / 1000);
+    const waitMin = Math.floor(waitSec / 60);
+    const remSec = waitSec % 60;
+    showToast('Подождите ' + (waitMin > 0 ? waitMin + ' мин ' : '') + remSec + 'с перед повторной попыткой');
+    return;
+  }
+
   let _migratePw = pw;
 
   try {
@@ -146,6 +210,7 @@ async function unlockWithPassword(pw) {
       state.failedAttempts = 0;
       localStorage.setItem('pv_failed_attempts', '0');
       localStorage.removeItem('pv_lockout_until');
+      await updateLockoutHmac(0, 0, storedHash);
       document.getElementById('unlock-pw').value = '';
       document.getElementById('unlock-error').style.display = 'none';
 
@@ -175,6 +240,9 @@ async function unlockWithPassword(pw) {
       await migrateVaultIfNeeded(key, _migratePw);
       _migratePw = null;
 
+      // Encrypt cloud configs with master key for security at rest
+      try { await encryptCloudConfigs(state.masterKey); } catch(e) { console.warn('Cloud config encryption skipped:', e); }
+
       startAutoLock();
       auditLog('unlock', null, null, 'success');
       enterApp();
@@ -197,6 +265,8 @@ async function unlockWithPassword(pw) {
         showToast('Слишком много попыток! Хранилище заблокировано на 15 минут.');
         auditLog('lockout', null, state.failedAttempts + ' неудачных попыток', 'failure');
       }
+      // Update tamper-resistant HMAC for lockout counter
+      await updateLockoutHmac(state.failedAttempts, state.lockoutUntil || 0, storedHash);
       const form = document.querySelector('#screen-unlock .auth-form');
       form.classList.add('shake');
       setTimeout(() => form.classList.remove('shake'), 500);

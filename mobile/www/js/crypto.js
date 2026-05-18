@@ -161,11 +161,24 @@ function generatePasswordString(length, options) {
       charset = charset.split(c).join('');
     }
   }
+  // Rejection sampling to eliminate modulo bias:
+  // Calculate the largest multiple of charset.length that fits in Uint32
+  // and reject values >= that threshold to ensure uniform distribution.
+  const charsetLen = charset.length;
+  const maxAcceptable = Math.floor(0x100000000 / charsetLen) * charsetLen;
   let pw = '';
-  const arr = new Uint32Array(length);
-  crypto.getRandomValues(arr);
-  for (let i = 0; i < length; i++) {
-    pw += charset[arr[i] % charset.length];
+  const arr = new Uint32Array(length + 4); // extra entries for rejections
+  let idx = 0;
+  while (pw.length < length) {
+    if (idx >= arr.length) {
+      crypto.getRandomValues(arr);
+      idx = 0;
+    }
+    const val = arr[idx++];
+    if (val < maxAcceptable) {
+      pw += charset[val % charsetLen];
+    }
+    // else: reject this value (eliminates bias)
   }
   return pw;
 }

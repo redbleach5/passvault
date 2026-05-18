@@ -50,13 +50,13 @@ const _origLocalStorageRemove = localStorage.removeItem.bind(localStorage);
 const SENSITIVE_KEYS = [
   'pv_salt', 'pv_hash', 'pv_vault', 'pv_custom_services',
   'pv_audit', 'pv_audit_plain', 'pv_format', 'pv_failed_attempts',
-  'pv_lockout_until', 'pv_theme', 'pv_last_backup_time',
+  'pv_lockout_until', 'pv_lockout_hmac', 'pv_theme', 'pv_last_backup_time',
   'pv_cloud_provider', 'pv_webdav_config',
   'pv_theme_mode', 'pv_auto_lock_ms', 'pv_master_key_ttl_ms',
   'pv_firebase_config', 'pv_biometric_enabled',
   'pv_gdrive_config', 'pv_dropbox_config',
   'pv_last_sync_timestamp', 'pv_local_modified_at',
-  'pv_autofill_enabled'
+  'pv_autofill_enabled', 'pv_hidden_services'
 ];
 
 localStorage.setItem = function(key, value) {
@@ -120,3 +120,85 @@ export {
   _origLocalStorageSet, _origLocalStorageGet, _origLocalStorageRemove,
   preLoadSecureData, syncToSecureStorage
 };
+
+// ===== Encrypted cloud config storage =====
+// Cloud tokens/credentials are stored unencrypted in localStorage
+// which is a security risk on rooted devices. These helpers encrypt
+// cloud configs with the vault key when the vault is unlocked.
+
+const CLOUD_CONFIG_KEYS = ['pv_webdav_config', 'pv_gdrive_config', 'pv_dropbox_config', 'pv_firebase_config'];
+const CLOUD_ENCRYPTED_SUFFIX = '_enc';
+
+/**
+ * Encrypt all cloud configs with the master key.
+ * Called when the vault is unlocked.
+ */
+async function encryptCloudConfigs(masterKey) {
+  if (!masterKey) return;
+  for (const key of CLOUD_CONFIG_KEYS) {
+    try {
+      const raw = _origLocalStorageGet(key);
+      if (!raw) continue;
+      const enc = await _encryptData(raw, masterKey);
+      _origLocalStorageSet(key + CLOUD_ENCRYPTED_SUFFIX, enc);
+      // Remove plaintext version
+      _origLocalStorageRemove(key);
+      if (IS_CAPACITOR && Preferences) {
+        await SecureStorage.removeItem(key);
+      }
+    } catch(e) {
+      console.warn('Failed to encrypt cloud config:', key, e);
+    }
+  }
+}
+
+/**
+ * Decrypt all cloud configs back to plaintext.
+ * Called before the vault is locked.
+ */
+async function decryptCloudConfigs(masterKey) {
+  if (!masterKey) return;
+  for (const key of CLOUD_CONFIG_KEYS) {
+    try {
+      const encKey = key + CLOUD_ENCRYPTED_SUFFIX;
+      const enc = _origLocalStorageGet(encKey);
+      if (!enc) continue;
+      const dec = await _decryptData(enc, masterKey);
+      if (dec) {
+        _origLocalStorageSet(key, dec);
+        _origLocalStorageRemove(encKey);
+      }
+    } catch(e) {
+      console.warn('Failed to decrypt cloud config:', key, e);
+    }
+  }
+}
+
+// Internal encrypt/decrypt using AES-256-GCM (same format as vault)
+async function _encryptData(data, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(data));
+  const ivB64 = btoa(String.fromCharCode(...iv));
+  const ctB64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+  return ivB64 + ':' + ctB64;
+}
+
+async function _decryptData(encData, key) {
+  try {
+    const parts = encData.split(':');
+    if (parts.length !== 2) return null;
+    const ivBin = atob(parts[0]);
+    const ctBin = atob(parts[1]);
+    const iv = new Uint8Array(ivBin.length);
+    const ct = new Uint8Array(ctBin.length);
+    for (let i = 0; i < ivBin.length; i++) iv[i] = ivBin.charCodeAt(i);
+    for (let i = 0; i < ctBin.length; i++) ct[i] = ctBin.charCodeAt(i);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(decrypted);
+  } catch(e) {
+    return null;
+  }
+}
+
+export { encryptCloudConfigs, decryptCloudConfigs };

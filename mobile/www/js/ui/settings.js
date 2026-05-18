@@ -47,8 +47,10 @@ async function exportVault() {
     const vaultData = await loadVault();
     const serviceCount = Object.keys(vaultData.credentials || {}).length;
 
+    const hiddenServices = localStorage.getItem('pv_hidden_services');
+
     const exportObj = {
-      version: 2,
+      version: 3,
       format: 'passvault-export',
       kdf: 'PBKDF2-SHA256',
       kdfIterations: PBKDF2_ITERATIONS,
@@ -58,6 +60,7 @@ async function exportVault() {
       vault: vaultEnc,
       customServices: customEnc,
       auditLog: auditEnc,
+      hiddenServices: hiddenServices,
       formatVersion: format,
       timestamp: new Date().toISOString(),
       serviceCount: serviceCount
@@ -159,7 +162,7 @@ async function autoBackup() {
     const serviceCount = Object.keys(vaultData.credentials || {}).length;
 
     const exportObj = {
-      version: 2,
+      version: 3,
       format: 'passvault-export',
       kdf: 'PBKDF2-SHA256',
       kdfIterations: PBKDF2_ITERATIONS,
@@ -167,6 +170,7 @@ async function autoBackup() {
       salt, hash, vault: vaultEnc,
       customServices: customEnc,
       auditLog: auditEnc,
+      hiddenServices: localStorage.getItem('pv_hidden_services'),
       formatVersion: format,
       timestamp: new Date().toISOString(),
       serviceCount
@@ -290,6 +294,7 @@ async function doImportVault(importObj) {
     if (importObj.vault) localStorage.setItem('pv_vault', importObj.vault);
     if (importObj.customServices) localStorage.setItem('pv_custom_services', importObj.customServices);
     if (importObj.auditLog) localStorage.setItem('pv_audit', importObj.auditLog);
+    if (importObj.hiddenServices) localStorage.setItem('pv_hidden_services', importObj.hiddenServices);
     if (importObj.formatVersion) localStorage.setItem('pv_format', importObj.formatVersion);
 
     await auditLog('import', null, `Backup restored (${importObj.serviceCount || '?'} services)`, 'success');

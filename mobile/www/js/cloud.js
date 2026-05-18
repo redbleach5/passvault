@@ -233,6 +233,19 @@ async function cloudDownload() {
 
     const data = doc.data();
 
+    // Validate cloud data before overwriting local
+    if (!data.salt || !data.hash) {
+      return { success: false, error: 'Облачная копия повреждена: отсутствуют salt или hash' };
+    }
+    // Verify salt format (must be 32 hex chars = 16 bytes)
+    if (!/^[0-9a-f]{32}$/i.test(data.salt)) {
+      return { success: false, error: 'Облачная копия повреждена: неверный формат salt' };
+    }
+    // Verify hash format (must be 64 hex chars = 32 bytes)
+    if (!/^[0-9a-f]{64}$/i.test(data.hash)) {
+      return { success: false, error: 'Облачная копия повреждена: неверный формат hash' };
+    }
+
     // Save cloud data locally (it's still encrypted)
     if (data.salt) localStorage.setItem('pv_salt', data.salt);
     if (data.hash) localStorage.setItem('pv_hash', data.hash);

@@ -6,6 +6,7 @@ import { state } from '../state.js';
 import { showScreen, showToast } from '../ui.js';
 import { auditLog } from '../audit.js';
 import { syncToSecureStorage } from '../storage.js';
+import { decryptCloudConfigs } from '../storage.js';
 
 // ===== Tab switching =====
 
@@ -128,6 +129,12 @@ function initTheme() {
 // ===== Lock / Unlock =====
 
 function lockVault() {
+  // Decrypt cloud configs back to plaintext before losing the key
+  // so they can be used when vault is locked (e.g. for sync)
+  if (state.masterKey) {
+    const key = state.masterKey;
+    decryptCloudConfigs(key).catch(e => console.warn('Cloud config decryption on lock failed:', e));
+  }
   if (state.masterKey) {
     state.masterKey = null;
   }

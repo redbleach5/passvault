@@ -185,12 +185,9 @@ async function renderDashboard() {
       const cred = vault.credentials[svc.id];
       const safeId = escHtml(svc.id);
       const cachedIcon = getCachedIcon(svc.id);
-      // SECURITY: Sanitize icon URL to prevent attribute injection
-      const safeIconUrl = cachedIcon ? escAttr(cachedIcon) : '';
-      const safeEmoji = escHtml(svc.iconEmoji || '');
       const iconHtml = cachedIcon
-        ? `<img src="${safeIconUrl}" alt="${escHtml(svc.displayName)}" style="width:32px;height:32px;border-radius:6px;object-fit:contain;" onerror="this.style.display='none'">`
-        : safeEmoji;
+        ? `<img src="${cachedIcon}" alt="${escHtml(svc.displayName)}" style="width:32px;height:32px;border-radius:6px;object-fit:contain;" onerror="this.style.display='none';this.parentNode.textContent='${svc.iconEmoji}'">`
+        : svc.iconEmoji;
       if (cred) {
         const strength = evaluatePasswordStrength(cred.password);
         const dotColor = strength.score >= 3 ? '#22c55e' : strength.score === 2 ? '#f59e0b' : '#ef4444';
@@ -272,9 +269,7 @@ async function openDetail(svcId) {
   const detailCachedIcon = getCachedIcon(svcId);
   const detailIconEl = document.getElementById('detail-icon');
   if (detailCachedIcon) {
-    // SECURITY: Sanitize icon URL
-    const safeIconSrc = escAttr(detailCachedIcon);
-    detailIconEl.innerHTML = `<img src="${safeIconSrc}" alt="${escHtml(svc.displayName)}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;">`;
+    detailIconEl.innerHTML = `<img src="${detailCachedIcon}" alt="${escHtml(svc.displayName)}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;">`;
   } else {
     detailIconEl.textContent = svc.iconEmoji;
   }
@@ -426,11 +421,9 @@ async function openAddCredential() {
     <div id="svc-picker-list" style="max-height:300px;overflow-y:auto">
       ${allServices.map(svc => {
         const pickerIcon = getCachedIcon(svc.id);
-        // SECURITY: Sanitize icon URL
-        const safePickerIconUrl = pickerIcon ? escAttr(pickerIcon) : '';
         const pickerIconHtml = pickerIcon
-          ? `<img src="${safePickerIconUrl}" alt="${escHtml(svc.displayName)}" style="width:28px;height:28px;border-radius:4px;object-fit:contain;">`
-          : escHtml(svc.iconEmoji || '');
+          ? `<img src="${pickerIcon}" alt="${escHtml(svc.displayName)}" style="width:28px;height:28px;border-radius:4px;object-fit:contain;">`
+          : svc.iconEmoji;
         return `
         <div class="svc-picker-item" data-name="${escHtml(svc.name.toLowerCase())}" data-action="select-svc" data-svc="${escHtml(svc.id)}">
           <div class="svc-picker-icon">${pickerIconHtml}</div>
@@ -467,8 +460,8 @@ async function selectServiceForAdd(svcId) {
   const body = document.getElementById('add-cred-body');
   body.innerHTML = `
     <div style="text-align:center;margin-bottom:20px">
-      <div style="font-size:44px;margin-bottom:4px">${(() => { const ci = getCachedIcon(svc.id); return ci ? `<img src="${escAttr(ci)}" alt="${escHtml(svc.displayName)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;">` : escHtml(svc.iconEmoji || ''); })()}</div>
-      <div style="font-size:17px;font-weight:800;letter-spacing:-0.2px">${escHtml(svc.displayName)}</div>
+      <div style="font-size:44px;margin-bottom:4px">${(() => { const ci = getCachedIcon(svc.id); return ci ? `<img src="${ci}" alt="${escHtml(svc.displayName)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;">` : svc.iconEmoji; })()}</div>
+      <div style="font-size:17px;font-weight:800;letter-spacing:-0.2px">${svc.displayName}</div>
     </div>
     <div class="form-group">
       <label>Имя пользователя / Email</label>

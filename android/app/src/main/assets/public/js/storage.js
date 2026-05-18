@@ -1,12 +1,11 @@
 /**
  * storage.js — SecureStorage layer using @capacitor/preferences on mobile
  *
- * SECURITY IMPROVEMENTS (v8.3.0):
- * 1. On mobile, sensitive data is written ONLY to Capacitor Preferences,
- *    not to both localStorage AND Preferences (reduces attack surface).
- * 2. Cloud configs remain encrypted when vault is locked.
- * 3. All vault data is AES-256-GCM encrypted before storage.
- * 4. The master key is derived from the user's password via PBKDF2 with 600k iterations.
+ * SECURITY: All vault data is AES-256-GCM encrypted before storage.
+ * The master key is derived from the user's password via PBKDF2 with 600k iterations.
+ * Even though Preferences uses SharedPreferences on Android (not Android Keystore),
+ * the encrypted data is safe because an attacker with access to SharedPreferences
+ * would still need the user's password to decrypt.
  */
 
 const IS_CAPACITOR = !!(window.Capacitor && Capacitor.Plugins);
@@ -18,7 +17,7 @@ const SecureStorage = {
     try {
       if (IS_CAPACITOR && Preferences) {
         const result = await Preferences.get({ key });
-        return result.value;
+        return result.value; // returns null when not found (no throw)
       }
     } catch(e) {}
     return localStorage.getItem(key);
@@ -35,7 +34,7 @@ const SecureStorage = {
   async removeItem(key) {
     try {
       if (IS_CAPACITOR && Preferences) {
-        await Preferences.remove({ key });
+        await Preferences.remove({ key }); // .remove() not .delete()
         return;
       }
     } catch(e) {}
@@ -43,7 +42,7 @@ const SecureStorage = {
   }
 };
 
-// Original localStorage methods (for internal use)
+// Override localStorage for sensitive vault data on mobile
 const _origLocalStorageSet = localStorage.setItem.bind(localStorage);
 const _origLocalStorageGet = localStorage.getItem.bind(localStorage);
 const _origLocalStorageRemove = localStorage.removeItem.bind(localStorage);
@@ -57,42 +56,29 @@ const SENSITIVE_KEYS = [
   'pv_firebase_config', 'pv_biometric_enabled',
   'pv_gdrive_config', 'pv_dropbox_config',
   'pv_last_sync_timestamp', 'pv_local_modified_at',
-  'pv_autofill_enabled', 'pv_hidden_services',
-  'pv_update_skip_version', 'pv_update_last_check', 'pv_update_last_known_version'
+  'pv_autofill_enabled', 'pv_hidden_services'
 ];
 
-/**
- * SECURITY FIX: On mobile, sensitive data is written ONLY to Capacitor Preferences,
- * NOT to both localStorage AND Preferences. This eliminates the dual-write vulnerability
- * where data existed in two places (doubling the attack surface).
- *
- * localStorage is still used as a synchronous read cache (pre-loaded at startup)
- * so existing synchronous code continues to work.
- */
 localStorage.setItem = function(key, value) {
   if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
-    // Write ONLY to Capacitor Preferences on mobile (not localStorage)
     SecureStorage.setItem(key, value).catch(() => {});
-    // Update the in-memory cache for synchronous reads
-    _origLocalStorageSet(key, value);
-  } else {
-    _origLocalStorageSet(key, value);
   }
+  _origLocalStorageSet(key, value);
 };
 
 localStorage.getItem = function(key) {
-  // Synchronous read from localStorage cache (pre-loaded at startup)
+  if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
+    // Synchronous fallback for localStorage API - data is pre-loaded at startup
+    return _origLocalStorageGet(key);
+  }
   return _origLocalStorageGet(key);
 };
 
 localStorage.removeItem = function(key) {
   if (SENSITIVE_KEYS.includes(key) && IS_CAPACITOR && Preferences) {
-    // Remove from BOTH storages on mobile
     SecureStorage.removeItem(key).catch(() => {});
-    _origLocalStorageRemove(key);
-  } else {
-    _origLocalStorageRemove(key);
   }
+  _origLocalStorageRemove(key);
 };
 
 /**
@@ -113,7 +99,6 @@ async function preLoadSecureData() {
 
 /**
  * Sync data back to Preferences (called before app close).
- * Only syncs data that may not have been written to Preferences yet.
  */
 async function syncToSecureStorage() {
   if (!IS_CAPACITOR || !Preferences) return;
@@ -137,9 +122,9 @@ export {
 };
 
 // ===== Encrypted cloud config storage =====
-// Cloud tokens/credentials are encrypted with the vault key when the vault is unlocked.
-// When the vault is locked, cloud configs REMAIN ENCRYPTED (not decrypted to plaintext).
-// This prevents credential exposure on rooted devices when the vault is locked.
+// Cloud tokens/credentials are stored unencrypted in localStorage
+// which is a security risk on rooted devices. These helpers encrypt
+// cloud configs with the vault key when the vault is unlocked.
 
 const CLOUD_CONFIG_KEYS = ['pv_webdav_config', 'pv_gdrive_config', 'pv_dropbox_config', 'pv_firebase_config'];
 const CLOUD_ENCRYPTED_SUFFIX = '_enc';
@@ -154,8 +139,6 @@ async function encryptCloudConfigs(masterKey) {
     try {
       const raw = _origLocalStorageGet(key);
       if (!raw) continue;
-      // Don't re-encrypt already encrypted configs
-      if (raw && _origLocalStorageGet(key + CLOUD_ENCRYPTED_SUFFIX)) continue;
       const enc = await _encryptData(raw, masterKey);
       _origLocalStorageSet(key + CLOUD_ENCRYPTED_SUFFIX, enc);
       // Remove plaintext version
@@ -171,9 +154,7 @@ async function encryptCloudConfigs(masterKey) {
 
 /**
  * Decrypt all cloud configs back to plaintext.
- * SECURITY: This is now ONLY called when the vault is unlocked and cloud
- * sync needs access to the credentials. It is NOT called when locking the vault.
- * The caller is responsible for clearing the decrypted data after use.
+ * Called before the vault is locked.
  */
 async function decryptCloudConfigs(masterKey) {
   if (!masterKey) return;
@@ -190,29 +171,6 @@ async function decryptCloudConfigs(masterKey) {
     } catch(e) {
       console.warn('Failed to decrypt cloud config:', key, e);
     }
-  }
-}
-
-/**
- * Decrypt a single cloud config for on-demand use.
- * Returns the decrypted value without storing it in localStorage.
- * The caller should use it immediately and not retain it.
- */
-async function decryptCloudConfig(masterKey, configKey) {
-  if (!masterKey || !configKey) return null;
-  try {
-    const encKey = configKey + CLOUD_ENCRYPTED_SUFFIX;
-    let enc = _origLocalStorageGet(encKey);
-    // If no encrypted version, try plaintext
-    if (!enc) {
-      const plain = _origLocalStorageGet(configKey);
-      return plain;
-    }
-    const dec = await _decryptData(enc, masterKey);
-    return dec;
-  } catch(e) {
-    // Fallback: try plaintext
-    return _origLocalStorageGet(configKey);
   }
 }
 
@@ -243,4 +201,4 @@ async function _decryptData(encData, key) {
   }
 }
 
-export { encryptCloudConfigs, decryptCloudConfigs, decryptCloudConfig };
+export { encryptCloudConfigs, decryptCloudConfigs };

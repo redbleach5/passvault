@@ -173,30 +173,6 @@ async function cloudLogout() {
   }
 }
 
-// ===== Cloud Data Integrity =====
-
-/**
- * Compute HMAC-SHA256 of data using the stored hash as key.
- * This ensures cloud data hasn't been tampered with.
- * @param {string|null} data — The encrypted data string
- * @param {string} hashKey — The stored verification hash (used as HMAC key)
- * @returns {Promise<string>} Hex-encoded HMAC
- */
-async function computeDataHmac(data, hashKey) {
-  if (!data) return '';
-  try {
-    const enc = new TextEncoder();
-    // Use the stored hash as the HMAC key (attacker doesn't know it)
-    const keyData = enc.encode(hashKey);
-    const key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
-    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch(e) {
-    console.warn('[Cloud] HMAC computation failed:', e);
-    return '';
-  }
-}
-
 // ===== Cloud Sync =====
 
 /**
@@ -219,16 +195,9 @@ async function cloudUpload() {
     const hash = localStorage.getItem('pv_hash');
     const format = localStorage.getItem('pv_format') || 'v2';
 
-    // SECURITY: Compute HMAC of vault data for integrity verification on download
-    // This prevents a compromised cloud from serving tampered encrypted data
-    const vaultHmac = await computeDataHmac(vaultEnc, hash);
-    const customHmac = await computeDataHmac(customEnc, hash);
-
     const syncData = {
       vault: vaultEnc || null,
-      vaultHmac: vaultHmac,
       customServices: customEnc || null,
-      customHmac: customHmac,
       auditLog: auditEnc || null,
       salt: salt,
       hash: hash,
@@ -275,23 +244,6 @@ async function cloudDownload() {
     // Verify hash format (must be 64 hex chars = 32 bytes)
     if (!/^[0-9a-f]{64}$/i.test(data.hash)) {
       return { success: false, error: 'Облачная копия повреждена: неверный формат hash' };
-    }
-
-    // SECURITY: Verify HMAC integrity of encrypted vault data
-    // This prevents a compromised cloud from serving tampered encrypted data
-    if (data.vault && data.vaultHmac) {
-      const expectedHmac = await computeDataHmac(data.vault, data.hash);
-      if (expectedHmac !== data.vaultHmac) {
-        await auditLog('cloud_download', null, 'HMAC verification failed for vault', 'failure');
-        return { success: false, error: 'Облачная копия повреждена: не пройдена проверка целостности хранилища' };
-      }
-    }
-    if (data.customServices && data.customHmac) {
-      const expectedHmac = await computeDataHmac(data.customServices, data.hash);
-      if (expectedHmac !== data.customHmac) {
-        await auditLog('cloud_download', null, 'HMAC verification failed for custom services', 'failure');
-        return { success: false, error: 'Облачная копия повреждена: не пройдена проверка целостности сервисов' };
-      }
     }
 
     // Save cloud data locally (it's still encrypted)

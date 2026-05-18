@@ -3,6 +3,9 @@ package com.passvault.app.plugins;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -15,22 +18,28 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 /**
  * UpdaterPlugin — Capacitor plugin for downloading and installing APK updates.
  *
- * Downloads an APK from a given URL to the app's cache directory,
- * then triggers Android's package installer via an Intent with FileProvider.
+ * SECURITY: Verifies APK signing certificate before installation.
+ * The downloaded APK must be signed with the same certificate as the currently
+ * running app, preventing malicious APK injection attacks.
  *
- * Provides:
- * - downloadAndInstall(url): Download APK and prompt user to install
- * - canInstallApk(): Check if the app has permission to install APKs (Android 8+)
- * - requestInstallPermission(): Request the install permission (Android 8+)
+ * Flow:
+ * 1. Download APK from URL
+ * 2. Verify the APK's signing certificate matches the installed app's certificate
+ * 3. If verified, trigger Android's package installer
+ * 4. If verification fails, reject the update and delete the downloaded file
  */
 @CapacitorPlugin(
     name = "Updater",
@@ -47,7 +56,7 @@ public class UpdaterPlugin extends Plugin {
 
     /**
      * Download an APK from the given URL and prompt the user to install it.
-     * This runs the download on a background thread and reports progress.
+     * Verifies the APK signing certificate matches the current app before installing.
      */
     @PluginMethod
     public void downloadAndInstall(PluginCall call) {
@@ -57,12 +66,16 @@ public class UpdaterPlugin extends Plugin {
             return;
         }
 
-        // Save the call so we can resolve it after install prompt
+        // Validate URL must be from GitHub (prevent arbitrary URL downloads)
+        if (!downloadUrl.startsWith("https://github.com/") && !downloadUrl.startsWith("https://objects.githubusercontent.com/")) {
+            call.reject("Invalid download URL: must be from GitHub");
+            return;
+        }
+
         savedCall = call;
 
         Log.i(TAG, "Starting APK download: " + downloadUrl);
 
-        // Run download on a background thread
         new Thread(() -> {
             try {
                 File apkFile = downloadApk(downloadUrl);
@@ -78,13 +91,48 @@ public class UpdaterPlugin extends Plugin {
                 Log.i(TAG, "APK downloaded: " + apkFile.getAbsolutePath() +
                        " (" + apkFile.length() + " bytes)");
 
+                // SECURITY: Verify APK signing certificate before installing
+                try {
+                    String installedCertHash = getInstalledAppCertHash();
+                    String downloadedCertHash = getApkCertHash(apkFile);
+
+                    if (installedCertHash == null || downloadedCertHash == null) {
+                        Log.e(TAG, "SECURITY: Cannot verify APK certificate - aborting install");
+                        apkFile.delete();
+                        if (savedCall != null) {
+                            savedCall.reject("Security verification failed: cannot verify APK signature");
+                            savedCall = null;
+                        }
+                        return;
+                    }
+
+                    if (!installedCertHash.equals(downloadedCertHash)) {
+                        Log.e(TAG, "SECURITY: APK certificate mismatch! Installed=" +
+                              installedCertHash + " Downloaded=" + downloadedCertHash);
+                        apkFile.delete();
+                        if (savedCall != null) {
+                            savedCall.reject("Security verification failed: APK signing certificate does not match. Possible tampering detected.");
+                            savedCall = null;
+                        }
+                        return;
+                    }
+
+                    Log.i(TAG, "SECURITY: APK certificate verified successfully (" + downloadedCertHash + ")");
+                } catch (Exception e) {
+                    Log.e(TAG, "SECURITY: Certificate verification error", e);
+                    apkFile.delete();
+                    if (savedCall != null) {
+                        savedCall.reject("Security verification failed: " + e.getMessage());
+                        savedCall = null;
+                    }
+                    return;
+                }
+
                 pendingApkFile = apkFile;
 
-                // Must show install prompt on UI thread
                 Activity activity = getActivity();
                 if (activity != null) {
                     activity.runOnUiThread(() -> {
-                        // On Android 8+, check for install permission first
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             if (!activity.getPackageManager().canRequestPackageInstalls()) {
                                 Log.w(TAG, "No REQUEST_INSTALL_PACKAGES permission, requesting...");
@@ -112,7 +160,6 @@ public class UpdaterPlugin extends Plugin {
 
     /**
      * Check if the app can install APK packages (Android 8+).
-     * On Android < 8, always returns true.
      */
     @PluginMethod
     public void canInstallApk(PluginCall call) {
@@ -129,7 +176,6 @@ public class UpdaterPlugin extends Plugin {
 
     /**
      * Request the REQUEST_INSTALL_PACKAGES permission (Android 8+).
-     * This opens the system settings page for the user to grant permission.
      */
     @PluginMethod
     public void requestInstallPermission(PluginCall call) {
@@ -152,7 +198,6 @@ public class UpdaterPlugin extends Plugin {
                 startActivityForResult(savedCall, intent, REQUEST_INSTALL_PERMISSION);
             } catch (Exception e) {
                 Log.e(TAG, "Failed to open install permission settings", e);
-                // Fallback: open app settings
                 try {
                     Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                     intent.setData(Uri.parse("package:" + getContext().getPackageName()));
@@ -165,6 +210,135 @@ public class UpdaterPlugin extends Plugin {
                 }
             }
         }
+    }
+
+    /**
+     * Get the SHA-256 hash of the currently installed app's signing certificate.
+     * This is used as the "ground truth" for verifying update APKs.
+     */
+    private String getInstalledAppCertHash() {
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            String packageName = getContext().getPackageName();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // Android 9+: Use GET_SIGNING_CERTIFICATES for proper signing info
+                PackageInfo info = pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+                if (info.signingInfo != null) {
+                    Signature[] signatures = info.signingInfo.getApkContentsSigners();
+                    if (signatures != null && signatures.length > 0) {
+                        return computeCertHash(signatures[0]);
+                    }
+                }
+            }
+
+            // Legacy: GET_SIGNATURES (deprecated but still works)
+            PackageInfo info = pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
+            if (info.signatures != null && info.signatures.length > 0) {
+                return computeCertHash(info.signatures[0]);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to get installed app cert hash", e);
+        }
+        return null;
+    }
+
+    /**
+     * Get the SHA-256 hash of the signing certificate from a downloaded APK file.
+     */
+    private String getApkCertHash(File apkFile) {
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            PackageInfo info = pm.getPackageArchiveInfo(
+                apkFile.getAbsolutePath(),
+                PackageManager.GET_SIGNATURES
+            );
+
+            if (info != null && info.signatures != null && info.signatures.length > 0) {
+                return computeCertHash(info.signatures[0]);
+            }
+
+            // Fallback: Parse the APK's certificate directly using CertificateFactory
+            // This works even when getPackageArchiveInfo fails
+            return extractCertHashFromApk(apkFile);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to get APK cert hash", e);
+        }
+        return null;
+    }
+
+    /**
+     * Compute SHA-256 hash of a signing certificate.
+     */
+    private String computeCertHash(Signature signature) {
+        try {
+            byte[] rawCert = signature.toByteArray();
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) certFactory.generateCertificate(
+                new ByteArrayInputStream(rawCert)
+            );
+            byte[] certEncoded = cert.getEncoded();
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(certEncoded);
+
+            // Convert to hex string
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to compute cert hash", e);
+            return null;
+        }
+    }
+
+    /**
+     * Fallback: Extract signing certificate hash directly from APK ZIP entries.
+     * This method parses the APK's META-INF/*.RSA/DSA/EC file directly.
+     */
+    private String extractCertHashFromApk(File apkFile) {
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(apkFile);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
+
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String name = entry.getName().toUpperCase();
+
+                // Look for signing certificate in META-INF/
+                if (name.startsWith("META-INF/") &&
+                    (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".EC"))) {
+
+                    InputStream is = zipFile.getInputStream(entry);
+                    CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                    // PKCS#7 signed data - extract certificates
+                    java.util.Collection<? extends java.security.cert.Certificate> certs =
+                        certFactory.generateCertificates(is);
+
+                    for (java.security.cert.Certificate cert : certs) {
+                        if (cert instanceof X509Certificate) {
+                            byte[] certEncoded = cert.getEncoded();
+                            MessageDigest md = MessageDigest.getInstance("SHA-256");
+                            byte[] digest = md.digest(certEncoded);
+
+                            StringBuilder sb = new StringBuilder();
+                            for (byte b : digest) {
+                                sb.append(String.format("%02x", b));
+                            }
+                            is.close();
+                            zipFile.close();
+                            return sb.toString();
+                        }
+                    }
+                    is.close();
+                }
+            }
+            zipFile.close();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to extract cert from APK", e);
+        }
+        return null;
     }
 
     /**
@@ -185,7 +359,6 @@ public class UpdaterPlugin extends Plugin {
             throw new Exception("HTTP " + responseCode);
         }
 
-        // Determine file name from URL or Content-Disposition
         String fileName = "passvault_update.apk";
         String disposition = connection.getHeaderField("Content-Disposition");
         if (disposition != null && disposition.contains("filename=")) {
@@ -196,7 +369,6 @@ public class UpdaterPlugin extends Plugin {
             }
         }
 
-        // Also check URL path for filename
         String urlPath = url.getPath();
         if (urlPath != null && urlPath.endsWith(".apk")) {
             int lastSlash = urlPath.lastIndexOf('/');
@@ -214,7 +386,6 @@ public class UpdaterPlugin extends Plugin {
 
         File apkFile = new File(cacheDir, fileName);
 
-        // Download with progress
         int contentLength = connection.getContentLength();
         Log.i(TAG, "Content-Length: " + contentLength + " bytes");
 
@@ -232,7 +403,6 @@ public class UpdaterPlugin extends Plugin {
 
             if (contentLength > 0) {
                 int progressPercent = (int) ((totalRead * 100) / contentLength);
-                // Notify progress every 5%
                 if (progressPercent != lastProgressPercent && progressPercent % 5 == 0) {
                     lastProgressPercent = progressPercent;
                     notifyProgress(progressPercent, totalRead, contentLength);
@@ -249,7 +419,9 @@ public class UpdaterPlugin extends Plugin {
 
         // Verify the file is a valid size (at least 1MB)
         if (apkFile.length() < 1024 * 1024) {
-            Log.w(TAG, "Downloaded file is suspiciously small: " + apkFile.length() + " bytes");
+            Log.w(TAG, "SECURITY: Downloaded file is suspiciously small: " + apkFile.length() + " bytes");
+            apkFile.delete();
+            throw new Exception("Downloaded file is too small - possible tampering");
         }
 
         return apkFile;
@@ -266,7 +438,7 @@ public class UpdaterPlugin extends Plugin {
             data.put("total", total);
             notifyListeners("downloadProgress", data);
         } catch (Exception e) {
-            // Ignore — JS layer might not be listening
+            // Ignore
         }
     }
 
@@ -292,7 +464,6 @@ public class UpdaterPlugin extends Plugin {
                 return;
             }
 
-            // Use FileProvider to create a content URI
             Uri apkUri = FileProvider.getUriForFile(
                 getContext(),
                 getContext().getPackageName() + ".fileprovider",
@@ -307,7 +478,6 @@ public class UpdaterPlugin extends Plugin {
             installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             installIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-            // Resolve activity to prevent crash
             if (installIntent.resolveActivity(activity.getPackageManager()) != null) {
                 activity.startActivity(installIntent);
 
@@ -335,18 +505,16 @@ public class UpdaterPlugin extends Plugin {
     }
 
     /**
-     * Handle activity results (install permission grant, etc.)
+     * Handle activity results.
      */
     @Override
     protected void handleOnActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_INSTALL_PERMISSION) {
-            // User came back from install permission settings
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 boolean canInstall = getContext().getPackageManager().canRequestPackageInstalls();
                 Log.i(TAG, "Install permission result: canInstall=" + canInstall);
 
                 if (canInstall && pendingApkFile != null) {
-                    // Permission granted, now prompt install
                     promptInstall();
                 } else if (savedCall != null) {
                     JSObject result = new JSObject();

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Default config: enforce HTTPS, block cleartext -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Domain-specific config for GitHub API (update checks) -->
+    <domain-config>
+        <domain includeSubdomains="false">api.github.com</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">objects.githubusercontent.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <!-- Pin GitHub's root CA (DigiCert) for extra protection -->
+        <pin-set expiration="2027-01-01">
+            <!-- DigiCert Global Root CA -->
+            <pin digest="SHA-256">r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4Ty+IlI56hUbKU=</pin>
+            <!-- DigiCert High Assurance EV Root CA -->
+            <pin digest="SHA-256">WoiWRrIOKFeU7oVLHq3O0pFHnkQfhS5xm3QIMjjjvU0=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Domain-specific config for Google APIs (Firebase, Drive, Dropbox) -->
+    <domain-config>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">google.com</domain>
+        <domain includeSubdomains="true">firebase.google.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <pin-set expiration="2027-01-01">
+            <!-- Google Internet Authority G3 -->
+            <pin digest="SHA-256">dhFZC6U2adufYRymqdsgU6bgJWOupemLu4MD3/MdBAU=</pin>
+            <!-- GlobalSign Root CA -->
+            <pin digest="SHA-256">87iXZzS0E4GZlwbfBSV4mf1o3UJBnlfgpv4b7/4Nk6E=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Local/Capacitor WebView: allow localhost for dev -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

@@ -111,33 +111,13 @@ async function decryptData(encData, key) {
 }
 
 // ===== Constant-time comparison =====
-// SECURITY: Fixed timing leak — always compare full length even when strings differ in length.
-// Previous version returned early on length mismatch, leaking length via timing.
+
 function constantTimeEqual(a, b) {
-  // Use the longer length to avoid length-based early return
-  const maxLen = Math.max(a.length, b.length);
-  let result = a.length !== b.length ? 1 : 0;
-  for (let i = 0; i < maxLen; i++) {
-    const aChar = i < a.length ? a.charCodeAt(i) : 0;
-    const bChar = i < b.length ? b.charCodeAt(i) : 0;
-    result |= aChar ^ bChar;
-  }
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return result === 0;
 }
-
-// ===== Common password list =====
-// Top 100 most common passwords (for strength evaluation)
-const COMMON_PASSWORDS = new Set([
-  'password', '123456', '12345678', 'qwerty', 'abc123', 'monkey', '1234567',
-  'letmein', 'trustno1', 'dragon', 'baseball', 'iloveyou', 'master', 'sunshine',
-  'ashley', 'bailey', 'passw0rd', 'shadow', '123123', '654321', 'superman',
-  'qazwsx', 'michael', 'football', 'password1', 'password123', 'batman',
-  'login', 'princess', 'qwerty123', 'welcome', '1q2w3e4r', 'admin',
-  'pass', 'test', 'guest', 'master', 'hello', 'charlie', 'donald',
-  '1234', '12345', '123456789', '1234567890', '000000', '111111',
-  'qwe123', '1q2w3e', 'zxcvbn', 'йцукен', 'пароль', 'привет',
-  'любовь', 'россия', 'Москва', 'солнце', 'кошка', 'собака'
-]);
 
 // ===== Password strength =====
 
@@ -152,11 +132,6 @@ function evaluatePasswordStrength(pw) {
   if (pw.length >= 16) score++;
   // Deductions
   if (/^[a-z]+$/.test(pw) || /^[0-9]+$/.test(pw) || /^[A-Z]+$/.test(pw)) score = Math.max(score - 2, 0);
-  // SECURITY: Check against common passwords — auto-reject
-  if (COMMON_PASSWORDS.has(pw.toLowerCase())) score = 0;
-  // Penalize simple patterns (repeated chars, sequential)
-  if (/^(.)\1+$/.test(pw)) score = 0; // all same char (aaaa, 1111)
-  if (/^(012|123|234|345|456|567|678|789|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)+$/i.test(pw)) score = Math.max(score - 2, 0);
   score = Math.min(score, 4);
   const labels = ['', 'Слабый', 'Средний', 'Хороший', 'Отличный'];
   const colors = ['', '#ef4444', '#f59e0b', '#22c55e', '#06b6d4'];
@@ -272,12 +247,6 @@ async function migrateVaultIfNeeded(aesKey, migratePw) {
           }
         } catch(e) {}
       }
-      // SECURITY: Clear old key material from memory after migration
-      // CryptoJS WordArray objects can be zeroed by overwriting their words array
-      if (oldKey && oldKey.words) {
-        oldKey.words.fill(0);
-      }
-
     }
   } catch(e) {
     console.error('Migration failed:', e);

@@ -127,16 +127,12 @@ async function doSetup() {
     btn.textContent = 'Создать хранилище';
   } catch(e) {
     console.error('Setup failed:', e);
-    // SECURITY: Don't expose internal error details to the user
-    errEl.textContent = 'Ошибка создания хранилища. Попробуйте ещё раз.';
+    errEl.textContent = 'Ошибка создания хранилища: ' + (e.message || e);
     errEl.style.display = 'block';
     btn.disabled = false;
     btn.textContent = 'Создать хранилище';
   }
 }
-
-// SECURITY: Closure-scoped pending import data (not on window)
-let _pendingImportData = null;
 
 // ===== Unlock =====
 
@@ -176,7 +172,7 @@ async function unlockWithPassword(pw) {
   // This makes it impossible to reset the counter without knowing the hash
   if (lockoutHmac) {
     const expectedHmac = await computeLockoutHmac(storedAttempts, storedLockoutUntil, storedHash);
-    if (!constantTimeEqual(expectedHmac, lockoutHmac)) {
+    if (expectedHmac !== lockoutHmac) {
       // Tampering detected — apply maximum lockout
       state.failedAttempts = 5;
       state.lockoutUntil = Date.now() + 15 * 60 * 1000;
@@ -224,9 +220,9 @@ async function unlockWithPassword(pw) {
       delete unlockInput.dataset.importMode;
       unlockInput.placeholder = 'Введите пароль';
 
-      if (isImportMode && _pendingImportData) {
-        const importObj = _pendingImportData;
-        _pendingImportData = null;
+      if (isImportMode && window._pendingImport) {
+        const importObj = window._pendingImport;
+        window._pendingImport = null;
         const { hash: importHash } = await deriveKeyAndHash(pw, importObj.salt);
         if (constantTimeEqual(importHash, importObj.hash)) {
           const { doImportVault } = await import('./ui/settings.js');
@@ -280,8 +276,7 @@ async function unlockWithPassword(pw) {
     }
   } catch(e) {
     console.error('Unlock failed:', e);
-    // SECURITY: Don't expose internal error details to the user
-    document.getElementById('unlock-error').textContent = 'Ошибка разблокировки. Попробуйте ещё раз.';
+    document.getElementById('unlock-error').textContent = 'Ошибка: ' + (e.message || e);
     document.getElementById('unlock-error').style.display = 'block';
     _migratePw = null;
   }
@@ -372,7 +367,7 @@ document.addEventListener('pause', () => {
 });
 
 // Make functions globally available for onclick handlers
-// SECURITY: Only expose UI functions, NOT sensitive data or internal state
+// Override inline fallback functions with full module versions
 window.checkSetupMatch = checkSetupMatch;
 window.doSetup = doSetup;
 window.doUnlock = doUnlock;
@@ -393,20 +388,6 @@ window.openAddCredential = async () => {
 window.closeDetail = async () => {
   const { closeDetail } = await import('./ui/vault.js');
   closeDetail();
-};
-
-// SECURITY: Clean up any sensitive data that may have leaked to window
-// These should never be on window — remove if found
-delete window._updateDownloadUrl;
-delete window._updateHtmlUrl;
-delete window._pendingImport;
-// _confirmCallback is needed by confirmAction but should be cleared after use
-// (already handled in closeConfirm)
-
-// SECURITY: Provide a setter for pending import data (used by settings.js)
-// This avoids putting the import data object on the window global
-window.setPendingImportData = function(data) {
-  _pendingImportData = data;
 };
 
 // Start the app

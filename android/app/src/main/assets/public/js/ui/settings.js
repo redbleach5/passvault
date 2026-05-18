@@ -265,10 +265,7 @@ async function processImportObject(importObj) {
       await doImportVault(importObj);
     });
   } else {
-    // SECURITY: Use closure-scoped variable instead of window global
-    if (window.setPendingImportData) {
-      window.setPendingImportData(importObj);
-    }
+    window._pendingImport = importObj;
     showToast('Введите мастер-пароль от резервной копии');
     document.getElementById('unlock-pw').placeholder = 'Мастер-пароль от резервной копии';
     document.getElementById('unlock-pw').dataset.importMode = '1';

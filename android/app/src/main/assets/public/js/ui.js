@@ -82,69 +82,28 @@ function escAttr(s) {
 
 /**
  * Copy to clipboard with auto-clear after 30 seconds.
- *
- * SECURITY IMPROVEMENTS (v8.4.0):
- * 1. Clipboard is cleared reliably on Android using both clipboard API and fallback
- * 2. Uses a random marker to detect if clipboard was overwritten by another app
- * 3. Falls back to execCommand for older browsers
- * 4. The textarea fallback is immediately destroyed after copy
- * 5. Marker is actually used to avoid clearing another app's clipboard data
  */
 function copyToClipboard(text, btn) {
-  // Generate a unique marker to detect if clipboard was overwritten
-  const _clipMarker = '_pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-
-  const doCopy = (clipText) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(clipText);
-    }
-    // Fallback for older browsers / restricted contexts
-    return new Promise((resolve, reject) => {
-      const ta = document.createElement('textarea');
-      ta.value = clipText;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none';
-      ta.setAttribute('readonly', '');
-      ta.setAttribute('autocomplete', 'off');
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try {
-        document.execCommand('copy');
-        resolve();
-      } catch(e) {
-        reject(e);
-      } finally {
-        // SECURITY: Immediately destroy the textarea to prevent memory leaks
-        ta.value = '';
-        document.body.removeChild(ta);
-      }
-    });
-  };
-
-  doCopy(text).then(() => {
+  navigator.clipboard.writeText(text).then(() => {
     if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 1200); }
     showToast('Скопировано! (очищено через 30с)');
-
-    // SECURITY: Clear clipboard after 30 seconds
-    // Use the marker to avoid clearing clipboard if user copied something else
     setTimeout(() => {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        navigator.clipboard.readText().then(current => {
-          // Only clear if the clipboard still contains our data
-          if (current === text) {
-            navigator.clipboard.writeText('').catch(() => {});
-          }
-        }).catch(() => {
-          // Can't read clipboard (permission denied) — try clearing anyway
-          doCopy('').catch(() => {});
-        });
-      } else {
-        // No readText API — try clearing directly
-        doCopy('').catch(() => {});
-      }
+      navigator.clipboard.readText().then(current => {
+        if (current === text) navigator.clipboard.writeText('');
+      }).catch(() => {});
     }, 30000);
   }).catch(() => {
-    showToast('Ошибка копирования');
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.value = '';
+    document.body.removeChild(ta);
+    showToast('Скопировано! (очищено через 30с)');
+    setTimeout(() => { try { navigator.clipboard.writeText(''); } catch(e){} }, 30000);
   });
 }
 

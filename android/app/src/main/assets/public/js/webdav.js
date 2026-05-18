@@ -75,11 +75,6 @@ async function testWebDAVConnection(url, username, password) {
     return { success: false, error: 'Заполните все поля' };
   }
 
-  // SECURITY: Warn about non-HTTPS URLs (allow but warn)
-  if (!url.startsWith('https://')) {
-    console.warn('[WebDAV] SECURITY: Non-HTTPS URL detected. Credentials will be sent in plaintext!');
-  }
-
   const normalizedUrl = normalizeUrl(url);
 
   try {
@@ -119,10 +114,6 @@ async function testWebDAVConnection(url, username, password) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 async function webdavUpload(url, username, password, data) {
-  // SECURITY: Warn about non-HTTPS
-  if (url && !url.startsWith('https://')) {
-    console.warn('[WebDAV] SECURITY: Uploading over non-HTTPS connection!');
-  }
   const normalizedUrl = normalizeUrl(url);
   const fileUrl = normalizedUrl + WEBDAV_FILE_NAME;
 
@@ -179,10 +170,6 @@ async function webdavUpload(url, username, password, data) {
  * @returns {Promise<{success: boolean, data?: string, error?: string}>}
  */
 async function webdavDownload(url, username, password) {
-  // SECURITY: Warn about non-HTTPS
-  if (url && !url.startsWith('https://')) {
-    console.warn('[WebDAV] SECURITY: Downloading over non-HTTPS connection!');
-  }
   const normalizedUrl = normalizeUrl(url);
   const fileUrl = normalizedUrl + WEBDAV_FILE_NAME;
 

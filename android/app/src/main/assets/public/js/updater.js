@@ -17,9 +17,9 @@
  * We check at most once per app launch + once every 24 hours.
  */
 
-import { showToast, openModal, closeModal, escHtml } from './ui.js';
+import { showToast, openModal, closeModal } from './ui.js';
 
-const APP_VERSION = '8.4.0';
+const APP_VERSION = '8.2.0';
 const GITHUB_REPO = 'redbleach5/passvault';
 const GITHUB_API = 'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -187,9 +187,8 @@ function showUpdateNotification(updateInfo) {
 
   // Truncate release notes if too long
   var shortNotes = notes.length > 500 ? notes.substring(0, 500) + '...' : notes;
-  // SECURITY: Sanitize release notes before inserting into DOM
-  // First escape all HTML to prevent XSS, then convert safe markdown
-  shortNotes = escHtml(shortNotes)
+  // Convert markdown-style headers and bold to simple HTML
+  shortNotes = shortNotes
     .replace(/### (.+)/g, '<strong>$1</strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>');
@@ -213,9 +212,9 @@ function showUpdateNotification(updateInfo) {
     </div>
   `;
 
-  // SECURITY: Store download info in a closure-scoped variable instead of window global
-  // to prevent tampering via browser console
-  _currentUpdateInfo = updateInfo;
+  // Store download URL for the download handler
+  window._updateDownloadUrl = updateInfo.downloadUrl;
+  window._updateHtmlUrl = updateInfo.htmlUrl;
 
   openModal('modal-update');
 }
@@ -224,20 +223,10 @@ function showUpdateNotification(updateInfo) {
  * Download the update APK using the native UpdaterPlugin.
  * Falls back to opening GitHub releases page if plugin unavailable.
  */
-// Closure-scoped update info (not accessible from window/console)
-var _currentUpdateInfo = null;
-
 async function downloadUpdate() {
-  if (!_currentUpdateInfo || !_currentUpdateInfo.downloadUrl) {
+  var url = window._updateDownloadUrl;
+  if (!url) {
     showToast('Ошибка: ссылка на скачивание не найдена');
-    return;
-  }
-  var url = _currentUpdateInfo.downloadUrl;
-
-  // SECURITY: Validate URL scheme — only allow HTTPS downloads
-  if (!url.startsWith('https://')) {
-    console.error('[Updater] SECURITY: Non-HTTPS download URL rejected:', url);
-    showToast('Ошибка: небезопасная ссылка скачивания');
     return;
   }
 
@@ -295,7 +284,7 @@ async function downloadUpdate() {
         }
       }
 
-      var result = await updaterPlugin.downloadAndInstall({ url: url, expectedVersion: _currentUpdateInfo.latestVersion });
+      var result = await updaterPlugin.downloadAndInstall({ url: url });
 
       if (result.success) {
         closeModal('modal-update');
@@ -316,7 +305,7 @@ async function downloadUpdate() {
     showToast('Открываем страницу скачивания...');
 
     // Try opening GitHub releases page
-    var releasesUrl = (_currentUpdateInfo && _currentUpdateInfo.htmlUrl) || ('https://github.com/' + GITHUB_REPO + '/releases');
+    var releasesUrl = window._updateHtmlUrl || ('https://github.com/' + GITHUB_REPO + '/releases');
 
     if (IS_CAPACITOR) {
       try {
